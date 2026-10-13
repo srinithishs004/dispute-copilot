@@ -66,7 +66,7 @@ test('GET /health returns ok', async () => {
 ```
 
 - [ ] **Step 2: Run `npm test` — expect FAIL (modules not found)**
-- [ ] **Step 3: Implement `loadConfig` with zod** (empty strings count as missing for required keys; optional ones become `null`) **and `createApp` with `express.json()` and `/health`.** `index.ts` calls `loadConfig(process.env)`, prints the error message and `process.exit(1)` on failure, else listens on `config.port`. Load `.env` locally with `node --env-file=.env` in the `dev` script (`tsx watch --env-file=.env src/index.ts`).
+- [ ] **Step 3: Implement `loadConfig` with zod** (empty strings count as missing for required keys; optional ones become `null`) **and `createApp` with `express.json()` and `/health`.** `index.ts` calls `loadConfig(process.env)`, prints the error message and `process.exit(1)` on failure, else listens on `config.port`. The `.env` file lives at the repo root, so the server `dev` script is `tsx watch --env-file=../.env src/index.ts`; `start` is `node dist/index.js`.
 - [ ] **Step 4: Run `npm test` — expect PASS; run `npm run build` — expect no errors**
 - [ ] **Step 5: Commit** — `git add -A && git commit -m "chore: scaffold server workspace with config and health route"`
 
