@@ -25,6 +25,24 @@ describe('createOrder', () => {
     expect(body.purchase_units[0].amount).toEqual({ currency_code: 'USD', value: '10.00' });
   });
 
+  test('sends PayPal experience_context with return/cancel URLs and PAY_NOW when returnUrl is given', async () => {
+    const { client, calls } = fakeClient({ id: 'ORD-4', links: [{ rel: 'payer-action', href: 'https://x/p' }] });
+    await createOrder(client, { ...input, returnUrl: 'https://example.com/return', cancelUrl: 'https://example.com/cancel' });
+    const body = calls[0]!.body as any;
+    expect(body.payment_source.paypal.experience_context).toEqual({
+      return_url: 'https://example.com/return',
+      cancel_url: 'https://example.com/cancel',
+      user_action: 'PAY_NOW',
+      shipping_preference: 'NO_SHIPPING',
+    });
+  });
+
+  test('omits payment_source when no returnUrl is given', async () => {
+    const { client, calls } = fakeClient({ id: 'ORD-5', links: [{ rel: 'approve', href: 'https://x/a' }] });
+    await createOrder(client, input);
+    expect((calls[0]!.body as any).payment_source).toBeUndefined();
+  });
+
   test('accepts rel=approve', async () => {
     const { client } = fakeClient({ id: 'ORD-2', links: [{ rel: 'approve', href: 'https://x/a' }] });
     expect((await createOrder(client, input)).approveUrl).toBe('https://x/a');

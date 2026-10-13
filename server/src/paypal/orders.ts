@@ -4,10 +4,30 @@ type Link = { rel: string; href: string };
 
 export async function createOrder(
   c: PayPalClient,
-  input: { invoiceId: string; amount: string; currency: 'USD'; description: string },
+  input: {
+    invoiceId: string;
+    amount: string;
+    currency: 'USD';
+    description: string;
+    /** Where PayPal sends the buyer after approving. Without it the approval page may not complete. */
+    returnUrl?: string;
+    cancelUrl?: string;
+  },
 ): Promise<{ id: string; approveUrl: string }> {
   const res = await c.request<{ id: string; links?: Link[] }>('POST', '/v2/checkout/orders', {
     intent: 'CAPTURE',
+    ...(input.returnUrl && {
+      payment_source: {
+        paypal: {
+          experience_context: {
+            return_url: input.returnUrl,
+            cancel_url: input.cancelUrl ?? input.returnUrl,
+            user_action: 'PAY_NOW',
+            shipping_preference: 'NO_SHIPPING',
+          },
+        },
+      },
+    }),
     purchase_units: [
       {
         invoice_id: input.invoiceId,
