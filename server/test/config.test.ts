@@ -33,3 +33,18 @@ test('empty optional values become null or default', () => {
   expect(c.port).toBe(3000);
   expect(c.paypal.baseUrl).toBe('https://api-m.sandbox.paypal.com');
 });
+
+test('rejects a non-sandbox PAYPAL_BASE_URL', () => {
+  expect(() =>
+    loadConfig({ PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's', PAYPAL_BASE_URL: 'https://api-m.paypal.com' }),
+  ).toThrow('PAYPAL_BASE_URL must be the PayPal sandbox URL (https://api-m.sandbox.paypal.com)');
+});
+
+test('accepts the sandbox PAYPAL_BASE_URL explicitly', () => {
+  const c = loadConfig({
+    PAYPAL_CLIENT_ID: 'id',
+    PAYPAL_CLIENT_SECRET: 's',
+    PAYPAL_BASE_URL: 'https://api-m.sandbox.paypal.com',
+  });
+  expect(c.paypal.baseUrl).toBe('https://api-m.sandbox.paypal.com');
+});

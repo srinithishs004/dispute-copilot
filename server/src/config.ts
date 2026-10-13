@@ -23,7 +23,13 @@ const EnvSchema = z.object({
   PAYPAL_CLIENT_SECRET: required('PAYPAL_CLIENT_SECRET'),
   PAYPAL_BASE_URL: z.preprocess(
     blankToUndefined,
-    z.string().url().default('https://api-m.sandbox.paypal.com'),
+    z
+      .string()
+      .url()
+      .default('https://api-m.sandbox.paypal.com')
+      .refine((u) => new URL(u).hostname === 'api-m.sandbox.paypal.com', {
+        message: 'PAYPAL_BASE_URL must be the PayPal sandbox URL (https://api-m.sandbox.paypal.com)',
+      }),
   ),
   PAYPAL_WEBHOOK_ID: optional,
   DEBUG_TOKEN: optional,

@@ -62,9 +62,9 @@ Warning: the full JSON may contain sandbox buyer and seller names and email addr
 
 ## Step 7: Check the webhook arrived
 
-On the deployed server, open `/debug/events` (with the debug token if one is configured).
+Check soon after opening the dispute. Events are kept in memory only, so a Render sleep or redeploy empties `/debug/events`. Use the `curl` command from step 7 of the deploy section below; a plain browser visit returns 401 because the endpoint needs the `x-debug-token` header, and it returns 404 if `DEBUG_TOKEN` is not set on the service.
 
-Success: the list contains a `CUSTOMER.DISPUTE.CREATED` event for your dispute ID.
+Success: the list contains a `CUSTOMER.DISPUTE.CREATED` event for your dispute ID. If the list is empty, look in Render → Logs for a line starting `webhook received: CUSTOMER.DISPUTE.CREATED` (it ends with the dispute ID).
 
 ## If something goes wrong
 
@@ -72,6 +72,8 @@ Success: the list contains a `CUSTOMER.DISPUTE.CREATED` event for your dispute I
 - **"Config error: ... is required"**: a variable in `.env` is missing or blank. The message names it.
 - **Dispute not appearing**: wait a few minutes. The sandbox can be slow. Confirm you used the same buyer account that paid.
 - **No `CUSTOMER.DISPUTE.CREATED` event**: check the webhook is subscribed to dispute events in the developer dashboard and points at the deployed server URL.
+- **Webhooks fail verification (400)**: expected until the real Webhook ID is set in `PAYPAL_WEBHOOK_ID` and the service is redeployed.
+- **Signature `FAILURE` even with the correct Webhook ID**: tell Claude; we may need to verify using the raw request body.
 - Never paste secrets or tokens anywhere. Share the `debug_id` the scripts print instead.
 
 ## Deploying the webhook receiver (Render)
@@ -79,7 +81,7 @@ Success: the list contains a `CUSTOMER.DISPUTE.CREATED` event for your dispute I
 1. Push this repo to GitHub.
 2. In Render, choose **New → Blueprint** and pick the repo. Render reads `render.yaml` and proposes the `dispute-copilot` web service.
 3. In the Render dashboard, fill the four secret env vars: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` (use a placeholder for now) and `DEBUG_TOKEN` (any long random string you make up).
-4. When the deploy finishes, open `https://<service>.onrender.com/health`. Success: it shows `{"ok":true}`.
+4. When the deploy finishes, copy the real `https://…onrender.com` URL from the Render dashboard (the service name may get a suffix) and use it wherever `<service>.onrender.com` appears below. Open `<that URL>/health`. Success: it shows `{"ok":true}`.
 5. Go to developer.paypal.com → Apps & Credentials (Sandbox) → your app → Webhooks → **Add webhook**. Use the URL `https://<service>.onrender.com/webhooks/paypal` and subscribe to `CUSTOMER.DISPUTE.CREATED`, `CUSTOMER.DISPUTE.UPDATED` and `CUSTOMER.DISPUTE.RESOLVED`.
 6. Copy the new **Webhook ID** into Render's `PAYPAL_WEBHOOK_ID` and redeploy.
 7. After a dispute is opened, view the received events:

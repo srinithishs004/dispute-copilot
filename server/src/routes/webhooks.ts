@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { Router } from 'express';
 import type { AppDeps } from '../app.js';
+import { PayPalError } from '../paypal/client.js';
 import { MissingHeadersError, verifyWebhook } from '../paypal/webhooks.js';
 
 function tokenMatches(provided: string | undefined, expected: string): boolean {
@@ -45,7 +46,11 @@ export function webhookRoutes(deps: AppDeps): Router {
         res.status(400).json({ error: 'missing transmission headers' });
         return;
       }
-      logger.warn('webhook verification call failed');
+      const detail =
+        err instanceof PayPalError
+          ? `status=${err.status} name=${err.name} debug_id=${err.debugId ?? '-'}`
+          : `name=${err instanceof Error ? err.name : typeof err}`;
+      logger.warn(`webhook verification call failed: ${detail}`);
       res.status(500).json({ error: 'verification unavailable' });
       return;
     }

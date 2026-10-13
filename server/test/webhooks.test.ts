@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { describe, expect, test } from 'vitest';
 import { createApp } from '../src/app.js';
-import type { PayPalClient } from '../src/paypal/client.js';
+import { PayPalError, type PayPalClient } from '../src/paypal/client.js';
 import { createEventLog } from '../src/webhooks/eventLog.js';
 import { fakeClient } from './paypal/fake.js';
 import { makeTestDeps, testConfig } from './helpers.js';
@@ -88,6 +88,57 @@ describe('POST /webhooks/paypal', () => {
     const res = await post(createApp(deps));
     expect(res.status).toBe(500);
     expect(deps.eventLog.list()).toEqual([]);
+  });
+
+  test('verify call throws PayPalError → logs status, name and debug_id only', async () => {
+    const paypal: PayPalClient = {
+      async request() {
+        throw new PayPalError(401, 'AUTHENTICATION_FAILURE', 'Bearer SECRET-TOKEN rejected', 'dbg-123', {
+          token: 'SECRET-TOKEN',
+        });
+      },
+    };
+    const warns: string[] = [];
+    const deps = makeTestDeps({ paypal, logger: { info: () => {}, warn: (m: unknown) => void warns.push(String(m)) } });
+    const res = await post(createApp(deps));
+    expect(res.status).toBe(500);
+    const logged = warns.join('\n');
+    expect(logged).toContain('status=401');
+    expect(logged).toContain('name=AUTHENTICATION_FAILURE');
+    expect(logged).toContain('debug_id=dbg-123');
+    expect(logged).not.toContain('SECRET-TOKEN');
+    expect(logged).not.toContain(testConfig.paypal.clientSecret);
+  });
+
+  test('verify call throws generic error → logs name only', async () => {
+    const paypal: PayPalClient = {
+      async request() {
+        throw new TypeError('secret detail');
+      },
+    };
+    const warns: string[] = [];
+    const deps = makeTestDeps({ paypal, logger: { info: () => {}, warn: (m: unknown) => void warns.push(String(m)) } });
+    await post(createApp(deps));
+    const logged = warns.join('\n');
+    expect(logged).toContain('TypeError');
+    expect(logged).not.toContain('secret detail');
+  });
+
+  test('malformed JSON → 400 JSON error, no stack, body not logged', async () => {
+    const logs: string[] = [];
+    const rec = (m: unknown) => void logs.push(String(m));
+    const deps = makeTestDeps({ logger: { info: rec, warn: rec } });
+    const res = await request(createApp(deps))
+      .post('/webhooks/paypal')
+      .set('content-type', 'application/json')
+      .send('{"secret": oops');
+    expect(res.status).toBe(400);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+    expect(res.body).toEqual({ error: 'invalid JSON' });
+    expect(res.text).not.toMatch(/<html|at \w|node_modules/i);
+    expect(logs.length).toBeGreaterThan(0);
+    expect(logs.join('\n')).not.toContain('oops');
+    expect(logs.join('\n')).toContain('entity.parse.failed');
   });
 
   test('verified body without string id → 400', async () => {
