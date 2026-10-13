@@ -31,13 +31,23 @@ export function bootstrap(): PayPalClient {
   }
 }
 
+/** status/name/debug_id plus PayPal's issue codes (from details[]) — never headers or secrets. */
+export function formatPayPalError(err: PayPalError): string {
+  const lines = [`PayPal error: status=${err.status} name=${err.name} debug_id=${err.debugId ?? 'n/a'}`];
+  const details = (err.body as { details?: { issue?: string; description?: string }[] } | null)?.details;
+  if (Array.isArray(details)) {
+    for (const d of details) lines.push(`  - ${d.issue ?? 'UNKNOWN'}: ${d.description ?? ''}`.trimEnd());
+  }
+  return lines.join('\n');
+}
+
 /** Runs a script body; prints PayPalError as status/name/debugId only, never headers or secrets. */
 export async function run(main: () => Promise<void>): Promise<void> {
   try {
     await main();
   } catch (err) {
     if (err instanceof PayPalError) {
-      console.error(`PayPal error: status=${err.status} name=${err.name} debug_id=${err.debugId ?? 'n/a'}`);
+      console.error(formatPayPalError(err));
     } else {
       console.error(`Error: ${(err as Error).message}`);
     }
