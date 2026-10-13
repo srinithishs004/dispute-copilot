@@ -150,3 +150,19 @@ describe('PayPal client', () => {
     expect(err.message).not.toContain('secret');
   });
 });
+
+describe('content-type on requests without a body', () => {
+  test('POST without a body still sends Content-Type: application/json (PayPal returns 415 otherwise)', async () => {
+    const { client, calls } = setup([tokenRes(), json(201, { id: 'X' })]);
+    await client.request('POST', '/v2/checkout/orders/ORD-1/capture');
+    const api = calls[1]!;
+    expect((api.init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(api.init.body).toBeUndefined();
+  });
+
+  test('GET without a body sends no Content-Type', async () => {
+    const { client, calls } = setup([tokenRes(), json(200, { items: [] })]);
+    await client.request('GET', '/v1/customer/disputes');
+    expect((calls[1]!.init.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+  });
+});

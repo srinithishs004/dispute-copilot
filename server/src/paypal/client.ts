@@ -97,7 +97,8 @@ export function createPayPalClient(opts: PayPalClientOptions): PayPalClient {
     for (;;) {
       const bearer = await getToken();
       const reqHeaders: Record<string, string> = { Authorization: `Bearer ${bearer}` };
-      if (body !== undefined) reqHeaders['Content-Type'] = 'application/json';
+      // PayPal rejects POST/PATCH without this header (415) even when there is no body.
+      if (body !== undefined || method !== 'GET') reqHeaders['Content-Type'] = 'application/json';
       Object.assign(reqHeaders, headers);
       const init: RequestInit = { method, headers: reqHeaders };
       if (body !== undefined) init.body = JSON.stringify(body);
