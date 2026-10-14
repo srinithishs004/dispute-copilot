@@ -1,0 +1,25 @@
+# Phase 0 scope: a single web service (the webhook receiver) only.
+# The worker, cron job and Postgres database arrive in later phases.
+services:
+  - type: web
+    name: dispute-copilot
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start -w server
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: DEBUG_TOKEN
+        sync: false
