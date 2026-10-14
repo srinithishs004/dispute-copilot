@@ -237,7 +237,7 @@ Field names come from the PayPal Disputes API reference. The fixture is a realis
 
 - [ ] **Step 1: Write failing tests**
   - Evidence: for `DEMO-HIST-02` and an INR dispute, all three requirements are present and `missing` is `[]`; for `DEMO-HIST-07`, missing includes "tracking number" and "delivery confirmation"; every fact id is unique.
-  - Job: an INR fixture whose `invoice_number` = `DEMO-HIST-02` → 1 dispute row linked, evidence items stored, state `ANALYZING`, 1 `draftLetter` job. Running it again leaves the same evidence row count, and the job count follows the jobs-module rule. A fixture with an unknown invoice and capture → `NEEDS_MANUAL`, no `draftLetter` job. A dispute already `READY_FOR_REVIEW` and synced again keeps that state.
+  - Job: an INR fixture whose `invoice_number` = `DEMO-HIST-02` → 1 dispute row linked, evidence items stored, state `ANALYZING`, 1 `draftLetter` job. Running it again leaves the same evidence row count, and does not add a second `draftLetter` job while one for that dispute is `queued` or `running` (match on `payload->>'disputeId'`). A fixture with an unknown invoice and capture → `NEEDS_MANUAL`, no `draftLetter` job. A dispute already `READY_FOR_REVIEW` and synced again keeps that state.
 - [ ] **Step 2: Run — expect FAIL**
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run all tests — expect PASS**
