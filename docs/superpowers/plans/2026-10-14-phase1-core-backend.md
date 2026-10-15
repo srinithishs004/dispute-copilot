@@ -208,7 +208,7 @@ Behaviour:
 
 **Files:**
 - Create: `server/src/disputes/repo.ts`, `server/src/agent/evidence.ts`, `server/src/jobs/processDispute.ts`
-- Test: `server/test/agent/evidence.test.ts`, `server/test/jobs/processDispute.test.ts`, `server/test/fixtures/dispute-inr.json`
+- Test: `server/test/agent/evidence.test.ts`, `server/test/jobs/processDispute.test.ts`, `server/test/fixtures/dispute-inr-sandbox.json` (already committed: a real sandbox payload with personal data replaced, `invoice_number` = `DEMO-HIST-02`)
 
 **Interfaces:**
 - Consumes: `getDispute`, `Db`, `findOrderBundle`, `findOrderByCaptureId`, `enqueue`
@@ -224,7 +224,7 @@ Behaviour:
   - `setLocalState(db, disputeId, state: LocalState, manualReason?: string)`; `type LocalState = 'NEW'|'ANALYZING'|'READY_FOR_REVIEW'|'ACTION_PENDING'|'ACTION_SENT'|'RESOLVED'|'NEEDS_MANUAL'`
   - `matchOrderId(db, detail): Promise<string | null>` — first `disputed_transactions[*].invoice_number` that exists in `orders`, else `seller_transaction_id` matched against `orders.paypal_capture_id`
   - `type EvidencePack = { disputeId: string; reason: string; amount: string; currency: string; facts: Fact[]; checklist: { requirement: string; present: boolean }[]; missing: string[] }`
-  - `type Fact = { id: string; label: string; value: string }` — ids like `order.id`, `shipment.0.tracking`, `shipment.0.delivered_at`, `message.2`, `policy.text`
+  - `type Fact = { id: string; label: string; value: string }` — ids like `order.id`, `shipment.0.tracking`, `shipment.0.delivered_at`, `message.2`, `policy.text`, plus facts from the dispute itself: `dispute.buyer_message.<n>` from `detail.messages[]` where `posted_by = 'BUYER'`, and `dispute.requested_evidence.<n>` from `detail.evidences[]` where `source = 'REQUESTED_FROM_SELLER'`
   - `buildEvidencePack(detail: DisputeDetail, bundle: OrderBundle): EvidencePack` — pure; requirements per reason:
     - `MERCHANDISE_OR_SERVICE_NOT_RECEIVED` → "tracking number", "delivery confirmation", "signature on delivery"
     - `MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED` → "item description", "buyer communication", "refund policy"
@@ -233,7 +233,7 @@ Behaviour:
     - No order → `NEEDS_MANUAL` "no matching order", done.
     - Otherwise `ANALYZING` → `buildEvidencePack` → replace the dispute's `evidence_items` (delete + insert, so a rerun is idempotent) → enqueue `draftLetter` `{ disputeId }`.
 
-Field names come from the PayPal Disputes API reference. The fixture is a realistic "item not received" dispute using them. **If the Phase 0 sandbox run shows different names, update the fixture and mapping first and note it in the spec's "Phase 0 findings".**
+Field names are **confirmed** by the Phase 0 sandbox run (spec §10, "Phase 0 findings"): `invoice_number` and `seller_transaction_id` live in `disputed_transactions[]`, `seller_transaction_id` equals our capture id, and the first stage is `INQUIRY` with ids starting `PP-R-`. `upsertDispute` also stores `allowed_response_options` inside `raw` (used by the Phase 2 advisor).
 
 - [ ] **Step 1: Write failing tests**
   - Evidence: for `DEMO-HIST-02` and an INR dispute, all three requirements are present and `missing` is `[]`; for `DEMO-HIST-07`, missing includes "tracking number" and "delivery confirmation"; every fact id is unique.

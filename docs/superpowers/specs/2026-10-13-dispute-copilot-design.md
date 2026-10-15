@@ -178,6 +178,29 @@ Guardrails in code (AI can't override):
 - Orders API for the demo store, with our order ID set as `invoice_id` so disputes map back to orders.
 - Exact enum values (status, reason, evidence types) and the evidence upload format get confirmed during the Phase 0 spike and recorded here.
 
+### Phase 0 findings (sandbox run, Oct 13–15, 2026)
+
+**Payment flow**
+- Orders need `payment_source.paypal.experience_context` with `return_url`, `user_action: PAY_NOW` — without a return URL the approval never completes and capture fails with `ORDER_NOT_APPROVED`.
+- PayPal returns `415 UNSUPPORTED_MEDIA_TYPE` on a body-less POST (capture) unless `Content-Type: application/json` is sent.
+- `.env` must use the API host `https://api-m.sandbox.paypal.com`, not the website `https://sandbox.paypal.com` (the config guard catches this).
+
+**How the dispute was opened (buyer, sandbox.paypal.com)**
+Activity → payment → Report a problem → "I haven't received the item or service" → item details (physical product, qty 1) → "The item hasn't reached me or I refused delivery" → expected delivery date + refund amount → seller contacted: no → note → Submit. Result: case id `PP-R-…`, opened in the **INQUIRY** stage, with a resolve-with-seller window of ~20 days. Buyer uploads accept JPG/PNG/GIF/PDF/TXT, 10 MB each, 50 MB total.
+
+**Dispute detail fields seen (GET /v1/customer/disputes/{id})**
+- `dispute_id` (`PP-R-…` for an inquiry), `reason` = `MERCHANDISE_OR_SERVICE_NOT_RECEIVED`, `status` = `WAITING_FOR_SELLER_RESPONSE`, `dispute_state` = `REQUIRED_ACTION`, `dispute_life_cycle_stage` = `INQUIRY`, `dispute_channel` = `INTERNAL`
+- `dispute_amount {currency_code, value}`, `seller_response_due_date` (ISO time)
+- `disputed_transactions[]`: `invoice_number` (= our order id — **primary match key**), `seller_transaction_id` (= our capture id — fallback match key), `buyer_transaction_id` (different id shown to the buyer), `items[]` (`item_name`, `item_type`, `reason`), `seller_protection_eligible`, `seller_protection_type`
+- `messages[]` (`posted_by` BUYER/SELLER, `time_posted`, `content`) — the buyer's own words; usable as evidence facts
+- `evidences[]` — includes what PayPal asks of the seller, e.g. `{evidence_type: PROOF_OF_FULFILLMENT, source: REQUESTED_FROM_SELLER}`
+- `allowed_response_options` — e.g. `accept_claim.accept_claim_types [PARTIAL_REFUND, REFUND]`, `make_offer.offer_types [REFUND]`; the advisor must only recommend actions listed here
+- `links[]` with `rel` = `send_message`, `provide_evidence`, `accept_claim`, `make_offer`, `escalate` — also signals which actions are open now
+- `fund_movements[]` — PayPal placed a hold on the seller (`HOLD_PLACED`, net of fees)
+- `offer.buyer_requested_amount`, `refund_details.allowed_refund_amount`
+
+**Still to confirm:** the webhook payload shape (`resource.id` vs `resource.dispute_id`) once the Render webhook is live.
+
 ## 11. Error handling
 
 - PayPal 429/5xx: retry with exponential backoff (3 tries), then mark action FAILED with the message shown in the UI and a Retry button.
