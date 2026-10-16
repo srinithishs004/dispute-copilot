@@ -8,7 +8,7 @@
       "seller_transaction_id": "CAPTURE0000000001",
       "create_time": "2026-10-13T18:06:00.000Z",
       "transaction_status": "HELD",
-      "gross_amount": { "currency_code": "USD", "value": "25.00" },
+      "gross_amount": { "currency_code": "USD", "value": "49.00" },
       "invoice_number": "DEMO-HIST-02",
       "buyer": { "email": "buyer@example.com", "payer_id": "PAYERID000001", "name": "Test Buyer" },
       "seller": { "email": "seller@example.com", "merchant_id": "MERCHANT00001", "name": "Test Store" },
@@ -27,7 +27,7 @@
   ],
   "reason": "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
   "status": "WAITING_FOR_SELLER_RESPONSE",
-  "dispute_amount": { "currency_code": "USD", "value": "25.00" },
+  "dispute_amount": { "currency_code": "USD", "value": "49.00" },
   "dispute_state": "REQUIRED_ACTION",
   "fund_movements": [
     { "party": "RECEIVER", "amount": { "currency_code": "USD", "value": "23.49" }, "initiated_time": "2026-10-15T01:41:04.000Z", "type": "DEBIT", "reason": "HOLD_PLACED" }
@@ -43,8 +43,8 @@
     { "evidence_type": "PROOF_OF_FULFILLMENT", "source": "REQUESTED_FROM_SELLER", "date": "2026-10-15T01:41:13.660Z" }
   ],
   "seller_response_due_date": "2026-11-04T01:37:51.235Z",
-  "offer": { "buyer_requested_amount": { "currency_code": "USD", "value": "25.00" } },
-  "refund_details": { "allowed_refund_amount": { "currency_code": "USD", "value": "25.00" } },
+  "offer": { "buyer_requested_amount": { "currency_code": "USD", "value": "49.00" } },
+  "refund_details": { "allowed_refund_amount": { "currency_code": "USD", "value": "49.00" } },
   "allowed_response_options": {
     "accept_claim": { "accept_claim_types": ["PARTIAL_REFUND", "REFUND"] },
     "make_offer": { "offer_types": ["REFUND"] }
