@@ -71,3 +71,17 @@ describe('draftLetter', () => {
     expect(out.draft.letter).toContain('1234567');
   });
 });
+
+describe('draftLetter email redaction', () => {
+  it('keeps email addresses out of the prompt', async () => {
+    const withEmail: EvidencePack = {
+      ...pack,
+      facts: [...pack.facts, { id: 'dispute.buyer_message.0', label: 'Buyer message in dispute', value: 'Contact me at jane.doe+x@example.com please' }],
+    };
+    const calls: { user: string }[] = [];
+    await draftLetter(fakeLlm({ letter: good, citedFactIds: ['order.id'] }, calls), withEmail);
+    expect(calls[0]!.user).not.toContain('jane.doe');
+    expect(calls[0]!.user).not.toContain('example.com');
+    expect(calls[0]!.user).toContain('Contact me at [email] please');
+  });
+});

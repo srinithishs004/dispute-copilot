@@ -34,6 +34,9 @@ const STANCE_LINE: Record<'FIGHT' | 'OFFER' | 'ACCEPT', string> = {
   ACCEPT: 'Stance: accept the dispute and agree to refund the buyer.',
 };
 
+const EMAIL_RE = /[^\s@<>()\[\],;:"']+@[^\s@<>()\[\],;:"']+\.[^\s@<>()\[\],;:"']+/g;
+const redactEmails = (s: string) => s.replace(EMAIL_RE, '[email]');
+
 /** Extra sources (e.g. dispute and order ids) whose digit runs the letter may repeat. */
 export async function draftLetter(
   llm: Llm,
@@ -46,7 +49,7 @@ export async function draftLetter(
     `Disputed amount: ${pack.amount} ${pack.currency}`.trim(),
     STANCE_LINE[stance],
     'Facts:',
-    ...pack.facts.map((f) => `[${f.id}] ${f.label}: ${f.value}`),
+    ...pack.facts.map((f) => `[${f.id}] ${f.label}: ${redactEmails(f.value)}`),
   ].join('\n');
 
   const { data, model } = await llm.generateJson({ system: SYSTEM, user }, LetterSchema);

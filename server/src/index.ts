@@ -4,6 +4,7 @@ import { loadConfig } from './config.js';
 import { createDb } from './db/db.js';
 import { migrate } from './db/migrate.js';
 import { buildHandlers } from './jobs/handlers.js';
+import { abortableSleep } from './jobs/sleep.js';
 import { startWorker } from './jobs/worker.js';
 import { createPayPalClient } from './paypal/client.js';
 import { seedStore } from './store/seed.js';
@@ -24,6 +25,11 @@ async function main(): Promise<void> {
   const server = createApp({ config, paypal, db }).listen(config.port, () => {
     console.log(`Dispute Copilot listening on port ${config.port}`);
   });
+  // Listen failures (e.g. EADDRINUSE) arrive as events, not rejections.
+  server.on('error', (err: Error) => {
+    console.error(`startup failed: ${err.name}: ${err.message.split('\n')[0]}`);
+    process.exit(1);
+  });
 
   const abort = new AbortController();
   let workerLoop: Promise<void> = Promise.resolve();
@@ -34,11 +40,7 @@ async function main(): Promise<void> {
       now: () => new Date(),
       logger: console,
       signal: abort.signal,
-      sleep: (ms) =>
-        new Promise<void>((resolve) => {
-          const t = setTimeout(resolve, ms);
-          abort.signal.addEventListener('abort', () => (clearTimeout(t), resolve()), { once: true });
-        }),
+      sleep: (ms) => abortableSleep(ms, abort.signal),
     });
     console.log('Job worker running inline');
   }
