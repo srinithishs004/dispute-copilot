@@ -1,6 +1,8 @@
 import type { AppDeps } from '../src/app.js';
 import type { Config } from '../src/config.js';
 import { createEventLog } from '../src/webhooks/eventLog.js';
+import { createDb, type Db } from '../src/db/db.js';
+import { migrate } from '../src/db/migrate.js';
 import { fakeClient } from './paypal/fake.js';
 
 export const testConfig: Config = {
@@ -12,6 +14,8 @@ export const testConfig: Config = {
     webhookId: 'WH-TEST',
   },
   debugToken: 'dbg',
+  databaseUrl: null,
+  pgliteDir: '.data/pglite',
 };
 
 export function makeTestDeps(overrides: Partial<AppDeps> = {}): AppDeps {
@@ -22,4 +26,11 @@ export function makeTestDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     logger: { info: () => {}, warn: () => {} },
     ...overrides,
   };
+}
+
+/** In-memory PGlite database with all migrations applied. */
+export async function makeTestDb(): Promise<Db> {
+  const db = await createDb({ databaseUrl: null, pgliteDir: null });
+  await migrate(db);
+  return db;
 }

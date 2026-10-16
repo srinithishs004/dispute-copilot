@@ -9,6 +9,8 @@ export interface Config {
     webhookId: string | null;
   };
   debugToken: string | null;
+  databaseUrl: string | null;
+  pgliteDir: string;
 }
 
 // Empty strings count as unset, so a blank line in .env behaves like a missing key.
@@ -33,6 +35,8 @@ const EnvSchema = z.object({
   ),
   PAYPAL_WEBHOOK_ID: optional,
   DEBUG_TOKEN: optional,
+  DATABASE_URL: optional,
+  PGLITE_DIR: z.preprocess(blankToUndefined, z.string().default('.data/pglite')),
 });
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -53,5 +57,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
       webhookId: e.PAYPAL_WEBHOOK_ID ?? null,
     },
     debugToken: e.DEBUG_TOKEN ?? null,
+    databaseUrl: e.DATABASE_URL ?? null,
+    pgliteDir: e.PGLITE_DIR,
   };
 }

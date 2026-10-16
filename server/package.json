@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "tsx watch --env-file=../.env src/index.ts",
     "build": "tsc -p tsconfig.json",
+    "postbuild": "node -e \"require('fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
     "start": "node dist/index.js",
     "test": "vitest run",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^22",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
     "supertest": "^7.3.1",
     "tsx": "^4.23.15",
@@ -26,7 +28,9 @@
     "vitest": "^5.0.4"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.10",
     "express": "^5.3.0",
+    "pg": "^8.23.1",
     "zod": "^4.6.7"
   }
 }
