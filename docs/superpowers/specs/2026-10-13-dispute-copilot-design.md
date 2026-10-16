@@ -102,7 +102,7 @@ Buyer opens dispute in sandbox ──> PayPal sends webhook
 **Phase 1 decisions (approved deviations from the original plan)**
 
 1. **Own `jobs` table instead of pg-boss.** Jobs are claimed with `FOR UPDATE SKIP LOCKED`. A claimed job has a 5 minute lease; if the worker dies, the job becomes claimable again. Each job gets 3 attempts with a 30 second retry delay.
-2. **PGlite when there is no `DATABASE_URL`.** Data is stored at `.data/pglite` (env `PGLITE_DIR`). In that mode the worker runs inside the web process (`RUN_WORKER_INLINE`, default true only when `DATABASE_URL` is unset). With Postgres, a separate worker process can run the jobs. On Render's free plan there is no persistent disk, so PGlite data resets on redeploy or restart. That is fine for the demo; Phase 3 may add Render Postgres.
+2. **PGlite when there is no `DATABASE_URL`.** Data is stored at `.data/pglite` (env `PGLITE_DIR`). In that mode the worker runs inside the web process (`RUN_WORKER_INLINE`, default true only when `DATABASE_URL` is unset). With Postgres, a separate worker process can run the jobs. Render's free web service has no persistent disk and loses local files when it sleeps (~15 min idle), so store orders would vanish. Decision (2026-10-16, Sri): Render uses a Basic-256mb Render Postgres paid from credits (`render.yaml` `databases`), with `RUN_WORKER_INLINE=true` on the web service.
 3. **Fight-only letter in Phase 1.** The letter is drafted for the FIGHT stance only. The Phase 2 advisor will pick fight, offer or accept, and the drafter will follow its choice.
 
 Three Render services share one codebase: `web` (API + built React app), `worker` (jobs), `cron` (deadline sweep).

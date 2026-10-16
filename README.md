@@ -52,7 +52,7 @@ You need at least one of `GEMINI_API_KEY` or `GROQ_API_KEY` to get a letter. A p
 ### Database
 
 - With no `DATABASE_URL`, data lives in PGlite files under `.data/pglite` and survives restarts. Delete that folder to start fresh.
-- Render's free plan has no persistent disk. On Render, PGlite data is wiped on every redeploy or restart. That is fine for the demo. Phase 3 may add Render Postgres.
+- On Render the app uses a small paid Render Postgres (`dispute-copilot-db`, Basic-256mb, paid from Render credits), wired through `render.yaml`. The free web service sleeps and loses its local files, so PGlite is only for local development. `render.yaml` sets `RUN_WORKER_INLINE=true` because there is no separate worker yet.
 
 ## Endpoints
 
