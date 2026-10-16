@@ -199,7 +199,13 @@ Activity → payment → Report a problem → "I haven't received the item or se
 - `fund_movements[]` — PayPal placed a hold on the seller (`HOLD_PLACED`, net of fees)
 - `offer.buyer_requested_amount`, `refund_details.allowed_refund_amount`
 
-**Still to confirm:** the webhook payload shape (`resource.id` vs `resource.dispute_id`) once the Render webhook is live.
+**Webhooks (confirmed Oct 16 on Render, webhook subscribed to CREATED/UPDATED/RESOLVED)**
+- Both `CUSTOMER.DISPUTE.CREATED` and `CUSTOMER.DISPUTE.UPDATED` arrived and passed `verify-webhook-signature` using the parsed body.
+- The dispute id is at **`resource.dispute_id`** — there is no `resource.id` (Phase 0 logged `resourceId: null`). Phase 1's `disputeIdFromEvent` reads `resource.dispute_id` first.
+- `resource` is a near-complete dispute snapshot (reason, status, amount, `disputed_transactions` with `invoice_number` and `seller_transaction_id`, messages). CREATED arrives before PayPal finishes setup (`status: UNDER_REVIEW`, no due date yet); UPDATED ~20 s later adds `seller_response_due_date`, `allowed_response_options` and the action links. So we always re-fetch the dispute via the API rather than trusting the webhook body.
+- Delay: dispute opened 00:26:23 → CREATED received 00:29:41 (~3 min); UPDATED followed ~20 s later.
+- Webhook payload links use the host `api.sandbox.paypal.com` (not `api-m.`); our client ignores them and builds URLs from `PAYPAL_BASE_URL`.
+- Free Render service slept between tests; keep `/health` warm before demos, and events must be stored durably (Phase 1 database).
 
 ## 11. Error handling
 
