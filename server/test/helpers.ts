@@ -1,6 +1,5 @@
 import type { AppDeps } from '../src/app.js';
 import type { Config } from '../src/config.js';
-import { createEventLog } from '../src/webhooks/eventLog.js';
 import { createDb, type Db } from '../src/db/db.js';
 import { migrate } from '../src/db/migrate.js';
 import { fakeClient } from './paypal/fake.js';
@@ -32,7 +31,6 @@ export function makeTestDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     db: noDb,
     config: testConfig,
     paypal: fakeClient({ verification_status: 'SUCCESS' }).client,
-    eventLog: createEventLog(),
     logger: { info: () => {}, warn: () => {} },
     ...overrides,
   };

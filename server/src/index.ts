@@ -4,7 +4,6 @@ import { createDb } from './db/db.js';
 import { migrate } from './db/migrate.js';
 import { createPayPalClient } from './paypal/client.js';
 import { seedStore } from './store/seed.js';
-import { createEventLog } from './webhooks/eventLog.js';
 
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
@@ -18,7 +17,7 @@ async function main(): Promise<void> {
     baseUrl: config.paypal.baseUrl,
   });
 
-  createApp({ config, paypal, eventLog: createEventLog(), db }).listen(config.port, () => {
+  createApp({ config, paypal, db }).listen(config.port, () => {
     console.log(`Dispute Copilot listening on port ${config.port}`);
   });
 }

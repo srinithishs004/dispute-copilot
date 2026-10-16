@@ -4,12 +4,10 @@ import type { Config } from './config.js';
 import type { PayPalClient } from './paypal/client.js';
 import { storeRoutes } from './routes/store.js';
 import { webhookRoutes } from './routes/webhooks.js';
-import type { EventLog } from './webhooks/eventLog.js';
 
 export interface AppDeps {
   config: Config;
   paypal: PayPalClient;
-  eventLog: EventLog;
   db: Db;
   logger?: Pick<Console, 'info' | 'warn'>;
 }
