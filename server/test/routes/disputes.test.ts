@@ -5,7 +5,7 @@ import { createApp } from '../../src/app.js';
 import { processDispute } from '../../src/jobs/processDispute.js';
 import { seedStore } from '../../src/store/seed.js';
 import type { DisputeDetail } from '../../src/paypal/disputes.js';
-import { makeTestDb, makeTestDeps } from '../helpers.js';
+import { makeTestDb, makeTestDeps, testConfig } from '../helpers.js';
 import { fakeClient } from '../paypal/fake.js';
 
 const inr = JSON.parse(
@@ -30,6 +30,13 @@ describe('dispute routes', () => {
     const { app } = await setup();
     expect((await request(app).get('/api/disputes')).status).toBe(401);
     expect((await request(app).get(`/api/disputes/${inr.dispute_id}`)).status).toBe(401);
+  });
+
+  it('404 when DEBUG_TOKEN is unset', async () => {
+    const { db } = await setup();
+    const app = createApp(makeTestDeps({ db, config: { ...testConfig, debugToken: null } }));
+    expect((await request(app).get('/api/disputes').set(H)).status).toBe(404);
+    expect((await request(app).get(`/api/disputes/${inr.dispute_id}`).set(H)).status).toBe(404);
   });
 
   it('lists disputes', async () => {

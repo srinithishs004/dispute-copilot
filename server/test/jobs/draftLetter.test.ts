@@ -78,6 +78,31 @@ describe('draftLetterJob', () => {
     expect((await db.query('select 1 from analyses')).rows).toHaveLength(0);
   });
 
+  it('unexpected error: NEEDS_MANUAL processing failed on the final attempt, unchanged on attempt 1', async () => {
+    const boom: Llm = {
+      async generateJson() {
+        throw new Error('kaboom');
+      },
+    };
+    const db = await setup();
+    await expect(draftLetterJob({ db, llm: boom })(job(1))).rejects.toThrow('kaboom');
+    expect(await row(db)).toEqual({ local_state: 'ANALYZING', manual_reason: null });
+    await expect(draftLetterJob({ db, llm: boom })(job(3))).rejects.toThrow('kaboom');
+    expect(await row(db)).toEqual({ local_state: 'NEEDS_MANUAL', manual_reason: 'processing failed' });
+  });
+
+  it('rethrows the original error even if setting NEEDS_MANUAL fails', async () => {
+    const db = await setup();
+    const failing = {
+      ...db,
+      query: async (sql: string, params?: unknown[]) => {
+        if (/update disputes/i.test(sql)) throw new Error('db down');
+        return db.query(sql, params);
+      },
+    } as typeof db;
+    await expect(draftLetterJob({ db: failing, llm: downLlm })(job(3))).rejects.toBeInstanceOf(LlmUnavailableError);
+  });
+
   it('throws when the dispute row is missing', async () => {
     const db = await makeTestDb();
     await expect(draftLetterJob({ db, llm: okLlm })(job(1, 'PP-R-NOPE-1'))).rejects.toThrow();

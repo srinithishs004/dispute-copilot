@@ -54,6 +54,24 @@ describe('processDispute', () => {
     expect(await n(db, "select count(*) as n from jobs where type = 'draftLetter'")).toBe(1);
   });
 
+  it('delays the draftLetter job by about 60 s', async () => {
+    const { db, run } = await setup(inr);
+    await run();
+    const r = (await db.query<{ run_at: string }>("select run_at from jobs where type = 'draftLetter'")).rows[0]!;
+    expect(new Date(r.run_at).getTime() - new Date('2026-10-15T00:00:00Z').getTime()).toBe(60_000);
+  });
+
+  it('closed (RESOLVED) dispute: sets RESOLVED, stores evidence, no draftLetter', async () => {
+    const detail = structuredClone(inr);
+    detail.status = 'RESOLVED';
+    const { db, run } = await setup(detail);
+    await run();
+    const d = (await db.query<{ local_state: string; order_id: string }>('select local_state, order_id from disputes')).rows[0]!;
+    expect(d).toMatchObject({ local_state: 'RESOLVED', order_id: 'DEMO-HIST-02' });
+    expect(await n(db, 'select count(*) as n from evidence_items')).toBeGreaterThan(0);
+    expect(await n(db, "select count(*) as n from jobs where type = 'draftLetter'")).toBe(0);
+  });
+
   it('is idempotent: same evidence count and no second draftLetter while one is queued/running', async () => {
     const { db, run } = await setup(inr);
     await run();

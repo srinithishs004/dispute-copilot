@@ -26,14 +26,14 @@ export function draftLetterJob(deps: DraftLetterDeps): JobHandler {
     );
     const dispute = rows[0];
     if (!dispute) throw new Error('draftLetter: dispute not found');
-    const bundle = dispute.order_id ? await findOrderBundle(db, dispute.order_id) : null;
-    if (!dispute.order_id || !bundle) {
-      await setLocalState(db, disputeId, 'NEEDS_MANUAL', 'no matching order');
-      return;
-    }
-
-    const pack = buildEvidencePack(dispute.raw, bundle);
     try {
+      const bundle = dispute.order_id ? await findOrderBundle(db, dispute.order_id) : null;
+      if (!dispute.order_id || !bundle) {
+        await setLocalState(db, disputeId, 'NEEDS_MANUAL', 'no matching order');
+        return;
+      }
+
+      const pack = buildEvidencePack(dispute.raw, bundle);
       const { draft, model } = await draftLetter(llm, pack, 'FIGHT', [disputeId, dispute.order_id]);
       await db.transaction(async (tx) => {
         await tx.query(
@@ -44,11 +44,16 @@ export function draftLetterJob(deps: DraftLetterDeps): JobHandler {
         await setLocalState(tx, disputeId, 'READY_FOR_REVIEW');
       });
     } catch (e) {
-      if (
-        job.attempts >= MAX_ATTEMPTS &&
-        (e instanceof LlmUnavailableError || e instanceof LetterRejectedError)
-      ) {
-        await setLocalState(db, disputeId, 'NEEDS_MANUAL', 'AI draft unavailable');
+      if (job.attempts >= MAX_ATTEMPTS) {
+        const reason =
+          e instanceof LlmUnavailableError || e instanceof LetterRejectedError
+            ? 'AI draft unavailable'
+            : 'processing failed';
+        try {
+          await setLocalState(db, disputeId, 'NEEDS_MANUAL', reason);
+        } catch {
+          // Surface the original error, not the failure to record it.
+        }
       }
       throw e;
     }

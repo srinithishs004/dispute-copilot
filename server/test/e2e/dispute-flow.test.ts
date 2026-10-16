@@ -42,14 +42,19 @@ it('webhook -> worker -> READY_FOR_REVIEW with evidence and a letter', async () 
     .send({ id: 'WH-E2E-1', event_type: 'CUSTOMER.DISPUTE.CREATED', resource: { dispute_id: inr.dispute_id } });
   expect(res.status).toBe(200);
 
+  let clock = new Date();
+  const now = () => clock;
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   const wd = {
     db,
-    handlers: buildHandlers({ db, paypal: client, llm, now: () => new Date() }),
-    now: () => new Date(),
+    handlers: buildHandlers({ db, paypal: client, llm, now }),
+    now,
     logger,
   };
   let ran = 0;
+  while (await runWorkerOnce(wd)) ran++;
+  expect(ran).toBe(1); // processDispute; draftLetter is delayed
+  clock = new Date(clock.getTime() + 61_000);
   while (await runWorkerOnce(wd)) ran++;
   expect(ran).toBe(2);
 

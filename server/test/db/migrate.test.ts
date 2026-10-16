@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'vitest';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDb, type Db } from '../../src/db/db.js';
@@ -49,4 +49,18 @@ test('loadConfig defaults databaseUrl and pgliteDir', () => {
   });
   expect(c2.databaseUrl).toBe('postgres://x/y');
   expect(c2.pgliteDir).toBe('.data/pglite');
+});
+
+test('createDb creates a missing nested pgliteDir', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pgl-'));
+  try {
+    const dir = join(root, 'a', 'b', 'pglite');
+    db = await createDb({ databaseUrl: null, pgliteDir: dir });
+    await migrate(db);
+    expect(existsSync(dir)).toBe(true);
+    await db.close();
+    db = undefined;
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 
@@ -59,6 +60,8 @@ export async function createDb(opts: CreateDbOptions): Promise<Db> {
     };
   }
   // PGlite persists to a directory when given one, otherwise lives in memory.
+  // PGlite's NodeFS mkdir is not recursive, so create the directory (and parents) first.
+  if (opts.pgliteDir) mkdirSync(opts.pgliteDir, { recursive: true });
   const lite = opts.pgliteDir ? new PGlite(opts.pgliteDir) : new PGlite();
   await lite.waitReady;
   return wrapPglite(lite);
