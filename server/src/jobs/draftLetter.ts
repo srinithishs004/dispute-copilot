@@ -20,12 +20,14 @@ export function draftLetterJob(deps: DraftLetterDeps): JobHandler {
     const disputeId = (job.payload as { disputeId?: unknown } | null)?.disputeId;
     if (typeof disputeId !== 'string' || !disputeId) throw new Error('draftLetter: payload.disputeId missing');
 
-    const { rows } = await db.query<{ order_id: string | null; raw: DisputeDetail }>(
-      'select order_id, raw from disputes where paypal_dispute_id = $1',
+    const { rows } = await db.query<{ order_id: string | null; raw: DisputeDetail; local_state: string }>(
+      'select order_id, raw, local_state from disputes where paypal_dispute_id = $1',
       [disputeId],
     );
     const dispute = rows[0];
     if (!dispute) throw new Error('draftLetter: dispute not found');
+    // Only draft while still being analyzed; a later state (e.g. RESOLVED) must not be overwritten.
+    if (dispute.local_state !== 'ANALYZING') return;
     try {
       const bundle = dispute.order_id ? await findOrderBundle(db, dispute.order_id) : null;
       if (!dispute.order_id || !bundle) {

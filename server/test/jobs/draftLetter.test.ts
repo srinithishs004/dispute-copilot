@@ -103,6 +103,22 @@ describe('draftLetterJob', () => {
     await expect(draftLetterJob({ db: failing, llm: downLlm })(job(3))).rejects.toBeInstanceOf(LlmUnavailableError);
   });
 
+  it('does nothing when the dispute is no longer ANALYZING (e.g. RESOLVED)', async () => {
+    const db = await setup();
+    await db.query("update disputes set local_state = 'RESOLVED'");
+    let called = 0;
+    const spy: Llm = {
+      async generateJson() {
+        called++;
+        throw new Error('should not be called');
+      },
+    };
+    await draftLetterJob({ db, llm: spy })(job(3));
+    expect(called).toBe(0);
+    expect((await row(db)).local_state).toBe('RESOLVED');
+    expect((await db.query('select 1 from analyses')).rows).toHaveLength(0);
+  });
+
   it('throws when the dispute row is missing', async () => {
     const db = await makeTestDb();
     await expect(draftLetterJob({ db, llm: okLlm })(job(1, 'PP-R-NOPE-1'))).rejects.toThrow();
