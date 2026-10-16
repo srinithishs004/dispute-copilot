@@ -45,6 +45,18 @@ describe('runWorkerOnce', () => {
     expect(JSON.stringify([log.info.mock.calls, log.warn.mock.calls, log.error.mock.calls])).not.toContain('S3CRET');
   });
 
+  it('logs the safe detail of an error that declares one', async () => {
+    const db = await makeTestDb();
+    const id = await enqueue(db, 'a', {}, { runAt: T0 });
+    await db.query('update jobs set attempts = 2 where id=$1', [id]);
+    const log = logger();
+    const err = Object.assign(new Error('S3CRET message'), { name: 'LlmUnavailableError', logDetail: 'gemini:http_404, groq:no_key' });
+    await runWorkerOnce({ db, handlers: { a: async () => { throw err; } }, now: () => T0, logger: log });
+    const logged = JSON.stringify(log.warn.mock.calls);
+    expect(logged).toContain('LlmUnavailableError (gemini:http_404, groq:no_key)');
+    expect(logged).not.toContain('S3CRET');
+  });
+
   it('fails an unknown type permanently', async () => {
     const db = await makeTestDb();
     const id = await enqueue(db, 'mystery', {}, { runAt: T0 });

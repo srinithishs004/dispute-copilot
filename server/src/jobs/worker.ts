@@ -1,6 +1,12 @@
 import type { Db } from '../db/db.js';
 import { claimNext, completeJob, failJob, failJobPermanently, type Job } from './queue.js';
 
+/** Error name, plus `logDetail` when the error declares one (errors opt in to carry log-safe detail). */
+function describe(err: Error): string {
+  const detail = (err as { logDetail?: unknown }).logDetail;
+  return typeof detail === 'string' && detail !== '' ? `${err.name} (${detail})` : err.name;
+}
+
 export type JobHandler = (job: Job) => Promise<void>;
 
 export interface WorkerDeps {
@@ -30,7 +36,7 @@ export async function runWorkerOnce(deps: WorkerDeps): Promise<boolean> {
     const err = e instanceof Error ? e : new Error(String(e));
     const outcome = await failJob(db, job, err, now());
     if (outcome === 'failed') {
-      logger.warn(`job ${job.id} (${job.type}) failed permanently after attempt ${job.attempts}: ${err.name}`);
+      logger.warn(`job ${job.id} (${job.type}) failed permanently after attempt ${job.attempts}: ${describe(err)}`);
     }
   }
   return true;

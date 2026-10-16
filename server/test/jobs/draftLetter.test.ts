@@ -68,7 +68,7 @@ describe('draftLetterJob', () => {
   it('sets NEEDS_MANUAL on the final attempt and rethrows', async () => {
     const db = await setup();
     await expect(draftLetterJob({ db, llm: downLlm })(job(3))).rejects.toBeInstanceOf(LlmUnavailableError);
-    expect(await row(db)).toEqual({ local_state: 'NEEDS_MANUAL', manual_reason: 'AI draft unavailable' });
+    expect(await row(db)).toEqual({ local_state: 'NEEDS_MANUAL', manual_reason: 'AI draft unavailable (gemini:network)' });
   });
 
   it('treats a rejected letter like an AI failure on the final attempt', async () => {

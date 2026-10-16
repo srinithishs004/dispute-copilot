@@ -2,9 +2,12 @@ import type { z } from 'zod';
 
 /** Thrown when no provider produced valid output. The message carries reason codes only. */
 export class LlmUnavailableError extends Error {
-  constructor(reasons: string[]) {
+  /** Reason codes only (e.g. `gemini:http_404`), safe to log. */
+  readonly logDetail: string;
+  constructor(readonly reasons: string[]) {
     super(`all LLM providers failed (${reasons.join(', ')})`);
     this.name = 'LlmUnavailableError';
+    this.logDetail = reasons.join(', ');
   }
 }
 
