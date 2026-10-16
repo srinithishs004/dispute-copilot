@@ -13,6 +13,10 @@ export interface Config {
   pgliteDir: string;
   /** Public origin of this server; PayPal sends buyers back to it. */
   publicBaseUrl: string;
+  llm: {
+    gemini: { apiKey: string | null; model: string };
+    groq: { apiKey: string | null; model: string };
+  };
 }
 
 // Empty strings count as unset, so a blank line in .env behaves like a missing key.
@@ -40,6 +44,10 @@ const EnvSchema = z.object({
   DATABASE_URL: optional,
   PGLITE_DIR: z.preprocess(blankToUndefined, z.string().default('.data/pglite')),
   PUBLIC_BASE_URL: z.preprocess(blankToUndefined, z.string().url().default('http://localhost:3000')),
+  GEMINI_API_KEY: optional,
+  GEMINI_MODEL: z.preprocess(blankToUndefined, z.string().default('gemini-3.6-flash')),
+  GROQ_API_KEY: optional,
+  GROQ_MODEL: z.preprocess(blankToUndefined, z.string().default('llama-3.3-70b-versatile')),
 });
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -63,5 +71,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     databaseUrl: e.DATABASE_URL ?? null,
     pgliteDir: e.PGLITE_DIR,
     publicBaseUrl: e.PUBLIC_BASE_URL.replace(/\/+$/, ''),
+    llm: {
+      gemini: { apiKey: e.GEMINI_API_KEY ?? null, model: e.GEMINI_MODEL },
+      groq: { apiKey: e.GROQ_API_KEY ?? null, model: e.GROQ_MODEL },
+    },
   };
 }

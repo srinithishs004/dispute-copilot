@@ -56,3 +56,12 @@ test('PUBLIC_BASE_URL defaults to localhost and drops a trailing slash', () => {
     'https://demo.example.com',
   );
 });
+
+test('LLM settings default to no keys and the default models', () => {
+  const c = loadConfig({ PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's', GEMINI_API_KEY: '', GROQ_MODEL: '' });
+  expect(c.llm.gemini).toEqual({ apiKey: null, model: 'gemini-3.6-flash' });
+  expect(c.llm.groq).toEqual({ apiKey: null, model: 'llama-3.3-70b-versatile' });
+  const d = loadConfig({ PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's', GEMINI_API_KEY: 'g', GROQ_API_KEY: 'q', GEMINI_MODEL: 'm1' });
+  expect(d.llm.gemini).toEqual({ apiKey: 'g', model: 'm1' });
+  expect(d.llm.groq.apiKey).toBe('q');
+});

@@ -17,6 +17,10 @@ export const testConfig: Config = {
   databaseUrl: null,
   pgliteDir: '.data/pglite',
   publicBaseUrl: 'http://localhost:3000',
+  llm: {
+    gemini: { apiKey: null, model: 'gemini-3.6-flash' },
+    groq: { apiKey: null, model: 'llama-3.3-70b-versatile' },
+  },
 };
 
 /** Stub for tests that never touch the database: any use fails loudly, with no PGlite startup cost. */
