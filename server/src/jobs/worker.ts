@@ -25,7 +25,7 @@ export async function runWorkerOnce(deps: WorkerDeps): Promise<boolean> {
 
   try {
     await handler(job);
-    await completeJob(db, job.id);
+    await completeJob(db, job.id, now());
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));
     const outcome = await failJob(db, job, err, now());

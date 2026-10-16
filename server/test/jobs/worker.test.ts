@@ -36,12 +36,13 @@ describe('runWorkerOnce', () => {
 
   it('warns and fails after the last attempt', async () => {
     const db = await makeTestDb();
-    const id = await enqueue(db, 'a', {}, { runAt: T0 });
+    const id = await enqueue(db, 'a', { secret: 'S3CRET' }, { runAt: T0 });
     await db.query('update jobs set attempts = 2 where id=$1', [id]);
     const log = logger();
     await runWorkerOnce({ db, handlers: { a: async () => { throw new Error('nope'); } }, now: () => T0, logger: log });
     expect((await stateOf(db, id)).state).toBe('failed');
     expect(log.warn).toHaveBeenCalled();
+    expect(JSON.stringify([log.info.mock.calls, log.warn.mock.calls, log.error.mock.calls])).not.toContain('S3CRET');
   });
 
   it('fails an unknown type permanently', async () => {
