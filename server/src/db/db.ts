@@ -61,6 +61,11 @@ export async function createDb(opts: CreateDbOptions): Promise<Db> {
   // PGlite persists to a directory when given one, otherwise lives in memory.
   const lite = opts.pgliteDir ? new PGlite(opts.pgliteDir) : new PGlite();
   await lite.waitReady;
+  return wrapPglite(lite);
+}
+
+/** Wrap an existing (ready) PGlite instance as a Db. */
+export function wrapPglite(lite: PGlite): Db {
   return {
     async query<T>(sql: string, params?: unknown[]) {
       const res = await lite.query<T>(sql, params);
