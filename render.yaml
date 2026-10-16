@@ -1,5 +1,6 @@
-# Phase 0 scope: a single web service (the webhook receiver) only.
-# The worker, cron job and Postgres database arrive in later phases.
+# Phase 1: one web service (webhooks, store, API and the job worker running inline)
+# plus a small paid Postgres so data survives the free web service sleeping.
+# Postgres is paid from Render credits (Basic-256mb, 1 GB).
 services:
   - type: web
     name: dispute-copilot
@@ -15,6 +16,15 @@ services:
         value: production
       - key: PAYPAL_BASE_URL
         value: https://api-m.sandbox.paypal.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dispute-copilot-db
+          property: connectionString
+      # With DATABASE_URL set the worker defaults to off; there is no separate worker yet.
+      - key: RUN_WORKER_INLINE
+        value: "true"
+      - key: PUBLIC_BASE_URL
+        sync: false
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
@@ -23,3 +33,14 @@ services:
         sync: false
       - key: DEBUG_TOKEN
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+
+databases:
+  - name: dispute-copilot-db
+    plan: basic-256mb
+    diskSizeGB: 1
+    databaseName: dispute_copilot
+    user: dispute_copilot

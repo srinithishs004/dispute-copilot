@@ -29,10 +29,20 @@ export type PayPalClientOptions = {
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  /** Per-fetch timeout in ms (default 10000). */
+  timeoutMs?: number;
 };
 
 const MAX_ATTEMPTS = 3;
 const BACKOFF_MS = [500, 1000];
+const MAX_RETRY_AFTER_S = 5;
+
+/** Integer seconds only (HTTP-date and junk are ignored), capped. */
+function retryAfterMs(res: Response): number | null {
+  const raw = res.headers.get('retry-after');
+  if (raw === null || !/^\d+$/.test(raw.trim())) return null;
+  return Math.min(Number(raw.trim()), MAX_RETRY_AFTER_S) * 1000;
+}
 
 async function parseBody(res: Response): Promise<unknown> {
   const text = await res.text();
@@ -60,14 +70,43 @@ export function createPayPalClient(opts: PayPalClientOptions): PayPalClient {
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const now = opts.now ?? Date.now;
   const baseUrl = opts.baseUrl.replace(/\/+$/, '');
+  const timeoutMs = opts.timeoutMs ?? 10_000;
 
   let token: string | null = null;
   let tokenExpiresAt = 0;
+  let tokenInFlight: Promise<string> | null = null;
 
-  async function getToken(): Promise<string> {
-    if (token !== null && now() < tokenExpiresAt) return token;
+  /**
+   * One fetch with timeout, retried (same 3-attempt budget) on network errors, 429 and 5xx.
+   * Never puts an underlying error message in the thrown error (it can contain URLs).
+   */
+  async function send(url: string, init: RequestInit): Promise<{ res: Response; body: unknown }> {
+    for (let attempt = 0; ; attempt++) {
+      const last = attempt >= MAX_ATTEMPTS - 1;
+      let res: Response;
+      let body: unknown;
+      try {
+        res = await fetchImpl(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+        body = await parseBody(res);
+      } catch (err) {
+        if (last) {
+          const name = err instanceof Error ? err.name : 'Error';
+          throw new PayPalError(0, 'NETWORK_ERROR', `network error: ${name}`, null, null);
+        }
+        await sleep(BACKOFF_MS[attempt]!);
+        continue;
+      }
+      if ((res.status === 429 || res.status >= 500) && !last) {
+        await sleep((res.status === 429 ? retryAfterMs(res) : null) ?? BACKOFF_MS[attempt]!);
+        continue;
+      }
+      return { res, body };
+    }
+  }
+
+  async function fetchToken(): Promise<string> {
     const basic = Buffer.from(`${opts.clientId}:${opts.clientSecret}`).toString('base64');
-    const res = await fetchImpl(`${baseUrl}/v1/oauth2/token`, {
+    const { res, body } = await send(`${baseUrl}/v1/oauth2/token`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${basic}`,
@@ -75,7 +114,6 @@ export function createPayPalClient(opts: PayPalClientOptions): PayPalClient {
       },
       body: 'grant_type=client_credentials',
     });
-    const body = await parseBody(res);
     if (!res.ok) throw toError(res, body);
     const parsed = body as { access_token?: unknown; expires_in?: unknown } | undefined;
     if (typeof parsed?.access_token !== 'string' || typeof parsed.expires_in !== 'number') {
@@ -86,6 +124,15 @@ export function createPayPalClient(opts: PayPalClientOptions): PayPalClient {
     return token;
   }
 
+  function getToken(): Promise<string> {
+    if (token !== null && now() < tokenExpiresAt) return Promise.resolve(token);
+    // Concurrent callers share one fetch; a failure clears it so the next call retries.
+    tokenInFlight ??= fetchToken().finally(() => {
+      tokenInFlight = null;
+    });
+    return tokenInFlight;
+  }
+
   async function request<T>(
     method: 'GET' | 'POST' | 'PATCH',
     path: string,
@@ -93,7 +140,6 @@ export function createPayPalClient(opts: PayPalClientOptions): PayPalClient {
     headers?: Record<string, string>,
   ): Promise<T> {
     let refreshed = false;
-    let attempt = 0;
     for (;;) {
       const bearer = await getToken();
       const reqHeaders: Record<string, string> = { Authorization: `Bearer ${bearer}` };
@@ -103,18 +149,13 @@ export function createPayPalClient(opts: PayPalClientOptions): PayPalClient {
       const init: RequestInit = { method, headers: reqHeaders };
       if (body !== undefined) init.body = JSON.stringify(body);
 
-      const res = await fetchImpl(`${baseUrl}${path}`, init);
-      const parsed = await parseBody(res);
+      const { res, body: parsed } = await send(`${baseUrl}${path}`, init);
       if (res.ok) return parsed as T;
 
       if (res.status === 401 && !refreshed) {
         refreshed = true;
-        token = null;
-        continue;
-      }
-      if ((res.status === 429 || res.status >= 500) && attempt < MAX_ATTEMPTS - 1) {
-        await sleep(BACKOFF_MS[attempt]!);
-        attempt++;
+        // Only drop the token this request used; a concurrent refresh may already have replaced it.
+        if (token === bearer) token = null;
         continue;
       }
       throw toError(res, parsed);

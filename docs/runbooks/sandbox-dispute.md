@@ -16,31 +16,23 @@ Copy `.env.example` to `.env` in the repo root and set at least `PAYPAL_CLIENT_I
 
 Success: the file exists and is not tracked by git (`git status` does not list it).
 
-## Step 2: Create an order
+## Step 2: Start the server
 
 ```
-npm run spike:order -w server -- 25.00
+npm run dev
 ```
 
-Success: it prints an `order_id` and an `approve_url` containing `sandbox.paypal.com`. Keep both. If the amount is not a positive number with at most 2 decimals it prints usage and exits.
+This starts the web server and the job worker together, using a local PGlite database (no Postgres needed). Set `DEBUG_TOKEN` in `.env` first. To get a letter, also set `GEMINI_API_KEY` or `GROQ_API_KEY`. PayPal sends buyers back to `PUBLIC_BASE_URL` (default `http://localhost:3000`), so keep it matching the address you open in the browser.
 
-## Step 3: Approve the order as the buyer
+Success: http://localhost:3000/health shows `{"ok":true}`.
 
-Open the `approve_url` in a browser (a private window helps). Log in as the sandbox **Personal** account and approve the payment.
+## Step 3: Create and pay for an order in the demo store
 
-Success: PayPal shows a confirmation or redirects you. The order is now approved but not yet paid.
+Open http://localhost:3000/store in a browser (a private window helps). Pick an item and start checkout. Log in to PayPal as the sandbox **Personal** account and approve the payment. PayPal sends you back to the store, which captures the payment for you.
 
-## Step 4: Capture the payment
+Success: you see a thank-you page with your order ID (`ORD-...`). Write it down. You do not need `spike:order` or `spike:capture` for new orders; they are only for experiments.
 
-```
-npm run spike:capture -w server -- <orderId>
-```
-
-Replace `<orderId>` with the `order_id` from step 2.
-
-Success: it prints `status: COMPLETED` and a `capture_id`.
-
-## Step 5: Open a dispute as the buyer
+## Step 4: Open a dispute as the buyer
 
 Log in to https://www.sandbox.paypal.com as the same Personal buyer account. Open the payment in **Activity**, choose **Report a problem**, and pick **Item not received**.
 
@@ -48,21 +40,35 @@ The exact sandbox menu wording may differ from this. Write down the options you 
 
 Success: the sandbox shows a dispute or case for the payment.
 
-## Step 6: Check the dispute through the API
+## Step 5: Check the dispute through the API
+
+Your dispute can reach the server in two ways: the webhook (it can take a few minutes) or a manual sync. To sync right away:
 
 ```
-npm run spike:disputes -w server
+curl -X POST -H "x-debug-token: <YOUR_DEBUG_TOKEN>" http://localhost:3000/api/disputes/sync
 ```
 
-Repeat every minute or two until the dispute appears.
+Then list the disputes:
 
-Success: a table lists the dispute (`dispute_id`, `reason`, `status`, `amount`, `create_time`), followed by the full JSON of the newest one. The reason is expected to be `MERCHANDISE_OR_SERVICE_NOT_RECEIVED`; record the actual value. Save the JSON (with no secrets in it) for Phase 1 work.
+```
+curl -H "x-debug-token: <YOUR_DEBUG_TOKEN>" http://localhost:3000/api/disputes
+```
 
-Warning: the full JSON may contain sandbox buyer and seller names and email addresses. They are fake, but they still look like personal data. Redact them before pasting the output into chat or Discord, or committing it.
+Copy the `id` of your dispute (it starts with `PP-R-`) and fetch it. The AI needs a few seconds:
 
-## Step 7: Check the webhook arrived
+```
+curl -H "x-debug-token: <YOUR_DEBUG_TOKEN>" http://localhost:3000/api/disputes/<disputeId>
+```
 
-Check soon after opening the dispute. Events are kept in memory only, so a Render sleep or redeploy empties `/debug/events`. Use the `curl` command from step 7 of the deploy section below; a plain browser visit returns 401 because the endpoint needs the `x-debug-token` header, and it returns 404 if `DEBUG_TOKEN` is not set on the service.
+Success: `localState` is `READY_FOR_REVIEW`, `evidence` is filled in, and `latestAnalysis.letterDraft` holds a letter. If you see `NEEDS_MANUAL` and `manualReason` is "AI draft unavailable", no AI key worked: check `GEMINI_API_KEY` or `GROQ_API_KEY`, then run the sync again.
+
+The old script `npm run spike:disputes -w server` still prints the raw dispute JSON straight from PayPal, if you need it.
+
+Warning: the raw JSON may contain sandbox buyer and seller names and email addresses. They are fake, but they still look like personal data. Redact them before pasting output into chat or Discord, or committing it.
+
+## Step 6: Check the webhook arrived
+
+PayPal cannot reach `localhost`, so locally you will not see webhooks unless you expose your machine with a tunnel; use the sync command from step 5 instead. On the deployed Render service, check soon after opening the dispute. Events are saved in the database. Locally they survive restarts. On Render the data lives in Render Postgres, so it survives the service sleeping and redeploys. Use the `curl` command from step 7 of the deploy section below; a plain browser visit returns 401 because the endpoint needs the `x-debug-token` header, and it returns 404 if `DEBUG_TOKEN` is not set on the service.
 
 Success: the list contains a `CUSTOMER.DISPUTE.CREATED` event for your dispute ID. If the list is empty, look in Render → Logs for a line starting `webhook received: CUSTOMER.DISPUTE.CREATED` (it ends with the dispute ID).
 
@@ -70,17 +76,18 @@ Success: the list contains a `CUSTOMER.DISPUTE.CREATED` event for your dispute I
 
 - **401 / `invalid_client`**: the client ID or secret is wrong, or you mixed Live and Sandbox credentials. Re-copy both from the Sandbox tab of your REST app.
 - **"Config error: ... is required"**: a variable in `.env` is missing or blank. The message names it.
-- **Dispute not appearing**: wait a few minutes. The sandbox can be slow. Confirm you used the same buyer account that paid.
+- **Dispute not appearing**: run the sync command from step 5, or wait a few minutes. The sandbox can be slow. Confirm you used the same buyer account that paid.
 - **No `CUSTOMER.DISPUTE.CREATED` event**: check the webhook is subscribed to dispute events in the developer dashboard and points at the deployed server URL.
 - **Webhooks fail verification (400)**: expected until the real Webhook ID is set in `PAYPAL_WEBHOOK_ID` and the service is redeployed.
 - **Signature `FAILURE` even with the correct Webhook ID**: tell Claude; we may need to verify using the raw request body.
+- **Buyer lands on a broken page after paying**: `PUBLIC_BASE_URL` does not match the address you are using. Fix it and start again with a new order.
 - Never paste secrets or tokens anywhere. Share the `debug_id` the scripts print instead.
 
 ## Deploying the webhook receiver (Render)
 
 1. Push this repo to GitHub.
 2. In Render, choose **New → Blueprint** and pick the repo. Render reads `render.yaml` and proposes the `dispute-copilot` web service.
-3. In the Render dashboard, fill the four secret env vars: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` (use a placeholder for now) and `DEBUG_TOKEN` (any long random string you make up).
+3. In the Render dashboard, set `PUBLIC_BASE_URL` to your Render URL once you know it, add `GEMINI_API_KEY` and/or `GROQ_API_KEY`, and fill the four secret env vars: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` (use a placeholder for now) and `DEBUG_TOKEN` (any long random string you make up).
 4. When the deploy finishes, copy the real `https://…onrender.com` URL from the Render dashboard (the service name may get a suffix) and use it wherever `<service>.onrender.com` appears below. Open `<that URL>/health`. Success: it shows `{"ok":true}`.
 5. Go to developer.paypal.com → Apps & Credentials (Sandbox) → your app → Webhooks → **Add webhook**. Use the URL `https://<service>.onrender.com/webhooks/paypal` and subscribe to `CUSTOMER.DISPUTE.CREATED`, `CUSTOMER.DISPUTE.UPDATED` and `CUSTOMER.DISPUTE.RESOLVED`.
 6. Copy the new **Webhook ID** into Render's `PAYPAL_WEBHOOK_ID` and redeploy.

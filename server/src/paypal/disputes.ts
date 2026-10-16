@@ -8,8 +8,21 @@ export type DisputeSummary = {
   create_time: string;
 };
 
-// Tightened in Phase 1 after the spike shows real payloads.
-export type DisputeDetail = DisputeSummary & Record<string, unknown>;
+type Money = { currency_code: string; value: string };
+
+// Typed from the Phase 0 sandbox payload; unknown extra fields stay accessible.
+export type DisputeDetail = DisputeSummary & {
+  dispute_life_cycle_stage?: string;
+  seller_response_due_date?: string;
+  disputed_transactions?: {
+    invoice_number?: string;
+    seller_transaction_id?: string;
+    gross_amount?: Money;
+  }[];
+  messages?: { posted_by?: string; time_posted?: string; content?: string }[];
+  evidences?: { evidence_type?: string; source?: string; notes?: string; date?: string }[];
+  allowed_response_options?: Record<string, unknown>;
+} & Record<string, unknown>;
 
 export async function listDisputes(
   c: PayPalClient,
