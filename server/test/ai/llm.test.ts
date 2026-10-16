@@ -157,3 +157,11 @@ describe('createLlm', () => {
     expect(signal).toBeInstanceOf(AbortSignal);
   });
 });
+
+describe('LlmUnavailableError', () => {
+  test('exposes reason codes as logDetail', () => {
+    const e = new LlmUnavailableError(['gemini:http_404', 'groq:no_key']);
+    expect(e.reasons).toEqual(['gemini:http_404', 'groq:no_key']);
+    expect(e.logDetail).toBe('gemini:http_404, groq:no_key');
+  });
+});

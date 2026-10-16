@@ -48,9 +48,11 @@ export function draftLetterJob(deps: DraftLetterDeps): JobHandler {
     } catch (e) {
       if (job.attempts >= MAX_ATTEMPTS) {
         const reason =
-          e instanceof LlmUnavailableError || e instanceof LetterRejectedError
-            ? 'AI draft unavailable'
-            : 'processing failed';
+          e instanceof LlmUnavailableError
+            ? `AI draft unavailable (${e.logDetail})`
+            : e instanceof LetterRejectedError
+              ? 'AI draft unavailable'
+              : 'processing failed';
         try {
           await setLocalState(db, disputeId, 'NEEDS_MANUAL', reason);
         } catch {
