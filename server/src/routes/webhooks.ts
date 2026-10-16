@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { AppDeps } from '../app.js';
+import type { Config } from '../config.js';
 import { enqueue } from '../jobs/queue.js';
 import { maskId } from '../log.js';
 import { listDisputes } from '../paypal/disputes.js';
@@ -19,12 +20,9 @@ function str(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
-export function webhookRoutes(deps: AppDeps): Router {
-  const { config, paypal, db } = deps;
-  const logger = deps.logger ?? console;
-  const router = Router();
-
-  const requireDebugToken = (req: Request, res: Response, next: NextFunction): void => {
+/** Debug-token guard: 404 when no token is configured, 401 on mismatch. */
+export function makeRequireDebugToken(config: Pick<Config, 'debugToken'>) {
+  return (req: Request, res: Response, next: NextFunction): void => {
     const expected = config.debugToken;
     if (expected === null) {
       res.status(404).json({ error: 'not found' });
@@ -36,6 +34,14 @@ export function webhookRoutes(deps: AppDeps): Router {
     }
     next();
   };
+}
+
+export function webhookRoutes(deps: AppDeps): Router {
+  const { config, paypal, db } = deps;
+  const logger = deps.logger ?? console;
+  const router = Router();
+
+  const requireDebugToken = makeRequireDebugToken(config);
 
   router.post('/webhooks/paypal', async (req, res) => {
     const webhookId = config.paypal.webhookId;

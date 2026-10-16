@@ -65,3 +65,12 @@ test('LLM settings default to no keys and the default models', () => {
   expect(d.llm.gemini).toEqual({ apiKey: 'g', model: 'm1' });
   expect(d.llm.groq.apiKey).toBe('q');
 });
+
+test('runWorkerInline defaults to true only without DATABASE_URL, and can be overridden', () => {
+  const base = { PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's' };
+  expect(loadConfig(base).runWorkerInline).toBe(true);
+  expect(loadConfig({ ...base, DATABASE_URL: 'postgres://x' }).runWorkerInline).toBe(false);
+  expect(loadConfig({ ...base, DATABASE_URL: 'postgres://x', RUN_WORKER_INLINE: 'true' }).runWorkerInline).toBe(true);
+  expect(loadConfig({ ...base, RUN_WORKER_INLINE: 'false' }).runWorkerInline).toBe(false);
+  expect(() => loadConfig({ ...base, RUN_WORKER_INLINE: 'maybe' })).toThrow(/RUN_WORKER_INLINE/);
+});

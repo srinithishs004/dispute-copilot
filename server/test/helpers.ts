@@ -16,6 +16,7 @@ export const testConfig: Config = {
   debugToken: 'dbg',
   databaseUrl: null,
   pgliteDir: '.data/pglite',
+  runWorkerInline: true,
   publicBaseUrl: 'http://localhost:3000',
   llm: {
     gemini: { apiKey: null, model: 'gemini-3.6-flash' },
