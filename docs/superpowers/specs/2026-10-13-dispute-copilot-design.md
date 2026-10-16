@@ -64,8 +64,8 @@ Plus, for the pitch: run the advisor over 10–15 sample cases and show results 
 | Language | TypeScript everywhere | One language for a solo dev |
 | Frontend | React + Vite, AG Grid (Community) | Sponsor tool, fast dev server |
 | Backend | Node 22 + Express | Simple, many examples |
-| Database | Postgres (hosted on Render) | Docker/psql not installed locally |
-| Background jobs | pg-boss (job queue stored in Postgres) | No Redis needed |
+| Database | Postgres (`DATABASE_URL`); PGlite at `.data/pglite` (`PGLITE_DIR`) when `DATABASE_URL` is unset | Docker/psql not installed locally; PGlite needs no install |
+| Background jobs | Own `jobs` table in Postgres/PGlite, claimed with `FOR UPDATE SKIP LOCKED` (5 minute lease, 3 attempts, 30 s retry delay) | No Redis; works on PGlite, which pg-boss does not (decision 1, see below) |
 | AI | Gemini Flash (free tier) primary, Groq (free tier) fallback | Free; one wrapper so providers can swap |
 | Tests | Vitest + supertest; PayPal/AI calls mocked | Fast, no network in unit tests |
 | Hosting | Render: web service, background worker, cron job, Postgres | Sponsor tool |
@@ -98,6 +98,12 @@ Buyer opens dispute in sandbox ──> PayPal sends webhook
                                         │
                          [cron] every hour: deadline sweep → flag disputes due soon
 ```
+
+**Phase 1 decisions (approved deviations from the original plan)**
+
+1. **Own `jobs` table instead of pg-boss.** Jobs are claimed with `FOR UPDATE SKIP LOCKED`. A claimed job has a 5 minute lease; if the worker dies, the job becomes claimable again. Each job gets 3 attempts with a 30 second retry delay.
+2. **PGlite when there is no `DATABASE_URL`.** Data is stored at `.data/pglite` (env `PGLITE_DIR`). In that mode the worker runs inside the web process (`RUN_WORKER_INLINE`, default true only when `DATABASE_URL` is unset). With Postgres, a separate worker process can run the jobs. On Render's free plan there is no persistent disk, so PGlite data resets on redeploy or restart. That is fine for the demo; Phase 3 may add Render Postgres.
+3. **Fight-only letter in Phase 1.** The letter is drafted for the FIGHT stance only. The Phase 2 advisor will pick fight, offer or accept, and the drafter will follow its choice.
 
 Three Render services share one codebase: `web` (API + built React app), `worker` (jobs), `cron` (deadline sweep).
 
@@ -164,9 +170,9 @@ Mock data for Phase 1: 10–15 orders seeded with a mix of strong cases (trackin
 Guardrails in code (AI can't override):
 - offer amount must be > 0 and < disputed amount,
 - if required evidence for the reason is missing, FIGHT is downgraded and flagged,
-- invalid JSON → retry once → try Groq → else `NEEDS_MANUAL`.
+- invalid JSON → retry once → try Groq → else `NEEDS_MANUAL`. In Phase 1, if no provider can draft the letter after the job's 3 attempts, the dispute goes to `NEEDS_MANUAL` with the reason "AI draft unavailable".
 
-**Letter drafter (AI):** writes a short, factual response that only cites facts present in the evidence pack. The seller can edit it before approving.
+**Letter drafter (AI):** in Phase 1 it always writes for the FIGHT stance (decision 3 in section 6); the advisor arrives in Phase 2. It writes a short, factual response that only cites facts present in the evidence pack. The seller can edit it before approving.
 
 **Human in the loop:** nothing is sent to PayPal until the seller clicks Approve.
 
@@ -213,12 +219,15 @@ Activity → payment → Report a problem → "I haven't received the item or se
 - PayPal 4xx: no retry; show the error clearly (e.g. "deadline passed", "evidence type not allowed").
 - AI failure: fall back to Groq; if both fail, show the evidence pack without a recommendation (`NEEDS_MANUAL`).
 - Webhook: always reply 200 quickly after saving; processing happens in the worker.
-- Worker crash: pg-boss retries the job; jobs are safe to run twice.
+- Worker crash: the job's lease (5 minutes) expires and another run claims it, up to 3 attempts in total; jobs are safe to run twice.
 
 ## 12. Security
 
 - All keys in environment variables; `.env` is git-ignored; never logged.
-- Logs mask emails and IDs.
+- Logs mask emails and IDs. Every logged ID goes through `maskId` (`server/src/log.ts`).
+- Never log tokens, secrets, request bodies, emails, prompts, letters or full IDs.
+- Emails are redacted before any text goes into an LLM prompt.
+- Protected endpoints (`/debug/events`, `/api/disputes*`) need the `x-debug-token` header and return 404 when `DEBUG_TOKEN` is not set.
 - Sandbox only. No real customer data anywhere — repo, video, Discord.
 
 ## 13. Testing
@@ -229,7 +238,7 @@ Activity → payment → Report a problem → "I haven't received the item or se
 
 ## 14. Deployment
 
-`render.yaml` blueprint: web service, background worker, cron job (hourly deadline sweep), Postgres. Env vars via a Render env group.
+`render.yaml` blueprint: web service, background worker, cron job (hourly deadline sweep), Postgres. (Phase 1 runs on the single web service with the inline worker and PGlite; the rest arrives later.) Env vars via a Render env group.
 
 ## 15. Risks and open questions
 
