@@ -16,10 +16,20 @@ export const testConfig: Config = {
   debugToken: 'dbg',
   databaseUrl: null,
   pgliteDir: '.data/pglite',
+  publicBaseUrl: 'http://localhost:3000',
+};
+
+/** Stub for tests that never touch the database: any use fails loudly, with no PGlite startup cost. */
+const noDb: Db = {
+  query: () => Promise.reject(new Error('db not provided in test')),
+  exec: () => Promise.reject(new Error('db not provided in test')),
+  transaction: () => Promise.reject(new Error('db not provided in test')),
+  close: () => Promise.resolve(),
 };
 
 export function makeTestDeps(overrides: Partial<AppDeps> = {}): AppDeps {
   return {
+    db: noDb,
     config: testConfig,
     paypal: fakeClient({ verification_status: 'SUCCESS' }).client,
     eventLog: createEventLog(),

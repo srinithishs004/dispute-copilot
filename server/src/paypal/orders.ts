@@ -12,6 +12,8 @@ export async function createOrder(
     /** Where PayPal sends the buyer after approving. Without it the approval page may not complete. */
     returnUrl?: string;
     cancelUrl?: string;
+    /** Sent as PayPal-Request-Id so a retried create cannot make a second order. */
+    requestId?: string;
   },
 ): Promise<{ id: string; approveUrl: string }> {
   const res = await c.request<{ id: string; links?: Link[] }>('POST', '/v2/checkout/orders', {
@@ -35,7 +37,7 @@ export async function createOrder(
         amount: { currency_code: input.currency, value: input.amount },
       },
     ],
-  });
+  }, input.requestId ? { 'PayPal-Request-Id': input.requestId } : undefined);
   const link = res.links?.find((l) => l.rel === 'payer-action' || l.rel === 'approve');
   if (!link) throw new Error(`PayPal order ${res.id} returned no approve link`);
   return { id: res.id, approveUrl: link.href };
@@ -44,11 +46,12 @@ export async function createOrder(
 export async function captureOrder(
   c: PayPalClient,
   orderId: string,
+  opts?: { requestId?: string },
 ): Promise<{ status: string; captureId: string }> {
   const res = await c.request<{
     status: string;
     purchase_units?: { payments?: { captures?: { id?: string }[] } }[];
-  }>('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`);
+  }>('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, undefined, opts?.requestId ? { 'PayPal-Request-Id': opts.requestId } : undefined);
   const captureId = res.purchase_units?.[0]?.payments?.captures?.[0]?.id;
   if (!captureId) throw new Error(`PayPal capture response for order ${orderId} has no capture id`);
   return { status: res.status, captureId };

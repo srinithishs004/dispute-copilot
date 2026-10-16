@@ -48,3 +48,11 @@ test('accepts the sandbox PAYPAL_BASE_URL explicitly', () => {
   });
   expect(c.paypal.baseUrl).toBe('https://api-m.sandbox.paypal.com');
 });
+
+test('PUBLIC_BASE_URL defaults to localhost and drops a trailing slash', () => {
+  const base = { PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's' };
+  expect(loadConfig(base).publicBaseUrl).toBe('http://localhost:3000');
+  expect(loadConfig({ ...base, PUBLIC_BASE_URL: 'https://demo.example.com/' }).publicBaseUrl).toBe(
+    'https://demo.example.com',
+  );
+});

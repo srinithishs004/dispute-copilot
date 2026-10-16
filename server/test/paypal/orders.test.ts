@@ -69,3 +69,25 @@ describe('captureOrder', () => {
     await expect(captureOrder(client, 'ORD-1')).rejects.toThrow(/capture id/i);
   });
 });
+
+describe('requestId', () => {
+  test('createOrder sends PayPal-Request-Id when given, and none otherwise', async () => {
+    const res = { id: 'ORD-9', links: [{ rel: 'approve', href: 'https://x/a' }] };
+    const a = fakeClient(res);
+    await createOrder(a.client, { ...input, requestId: 'create-ORD-ABC' });
+    expect(a.calls[0]!.headers).toEqual({ 'PayPal-Request-Id': 'create-ORD-ABC' });
+    const b = fakeClient(res);
+    await createOrder(b.client, input);
+    expect(b.calls[0]!.headers).toBeUndefined();
+  });
+
+  test('captureOrder sends PayPal-Request-Id when given, and none otherwise', async () => {
+    const res = { status: 'COMPLETED', purchase_units: [{ payments: { captures: [{ id: 'CAP-1' }] } }] };
+    const a = fakeClient(res);
+    await captureOrder(a.client, 'ORD-1', { requestId: 'capture-ORD-ABC' });
+    expect(a.calls[0]!.headers).toEqual({ 'PayPal-Request-Id': 'capture-ORD-ABC' });
+    const b = fakeClient(res);
+    await captureOrder(b.client, 'ORD-1');
+    expect(b.calls[0]!.headers).toBeUndefined();
+  });
+});

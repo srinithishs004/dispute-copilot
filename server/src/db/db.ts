@@ -18,6 +18,10 @@ export interface CreateDbOptions {
 export async function createDb(opts: CreateDbOptions): Promise<Db> {
   if (opts.databaseUrl) {
     const pool = new pg.Pool({ connectionString: opts.databaseUrl });
+    // An idle-client error must not crash the process; log the error class only (messages can carry the connection string).
+    pool.on('error', (err) => {
+      console.error(`postgres pool error: ${err.name}`);
+    });
     return {
       async query<T>(sql: string, params?: unknown[]) {
         const res = await pool.query(sql, params);
