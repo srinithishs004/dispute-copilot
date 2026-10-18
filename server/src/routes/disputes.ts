@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { AppDeps } from '../app.js';
+import { listActions } from '../actions/repo.js';
 import { buildEvidencePack } from '../agent/evidence.js';
 import { allowedActions, type DisputeDetail } from '../paypal/disputes.js';
 import { findOrderBundle } from '../store/repo.js';
@@ -77,20 +78,7 @@ export function disputeRoutes(deps: AppDeps): Router {
         [r.paypal_dispute_id],
       )
     ).rows[0];
-    const actions = (
-      await db.query<{
-        id: number;
-        type: string;
-        state: string;
-        error: string | null;
-        created_at: Date | string;
-        sent_at: Date | string | null;
-      }>(
-        `select id, type, state, error, created_at, sent_at from actions
-         where dispute_id = $1 order by created_at desc, id desc`,
-        [r.paypal_dispute_id],
-      )
-    ).rows;
+    const actions = await listActions(db, r.paypal_dispute_id);
     res.json({
       ...summary(r),
       allowedActions: r.raw ? allowedActions(r.raw) : null,
@@ -100,8 +88,8 @@ export function disputeRoutes(deps: AppDeps): Router {
         type: x.type,
         state: x.state,
         error: x.error,
-        createdAt: iso(x.created_at),
-        sentAt: iso(x.sent_at),
+        createdAt: x.createdAt,
+        sentAt: x.sentAt,
       })),
       manualReason: r.manual_reason,
       evidence,
