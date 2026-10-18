@@ -127,4 +127,33 @@ describe('processDispute', () => {
     );
     expect(await n(db, "select count(*) as n from jobs where type = 'analyzeDispute'")).toBe(0);
   });
+
+  describe('PayPal hands the case back', () => {
+    const cases: [string, string, string, number][] = [
+      ['ACTION_SENT', 'WAITING_FOR_SELLER_RESPONSE', 'ANALYZING', 1],
+      ['ACTION_SENT', 'WAITING_FOR_BUYER_RESPONSE', 'ACTION_SENT', 0],
+      ['ACTION_PENDING', 'WAITING_FOR_SELLER_RESPONSE', 'ACTION_PENDING', 0],
+    ];
+    for (const [from, status, to, jobs] of cases) {
+      it(`${from} + ${status} -> ${to}, ${jobs} analyzeDispute job(s)`, async () => {
+        const detail = structuredClone(inr);
+        detail.status = status;
+        const { db, run } = await setup(detail);
+        try {
+          await run();
+          await setLocalState(db, inr.dispute_id, from as never);
+          await db.query('delete from jobs');
+          await run();
+          expect((await db.query<{ local_state: string }>('select local_state from disputes')).rows[0]!.local_state).toBe(to);
+          expect(await n(db, "select count(*) as n from jobs where type = 'analyzeDispute'")).toBe(jobs);
+          if (jobs) {
+            const r = (await db.query<{ run_at: string }>("select run_at from jobs where type = 'analyzeDispute'")).rows[0]!;
+            expect(new Date(r.run_at).getTime() - new Date('2026-10-15T00:00:00Z').getTime()).toBe(60_000);
+          }
+        } finally {
+          await db.close();
+        }
+      });
+    }
+  });
 });

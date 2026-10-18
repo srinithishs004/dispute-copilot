@@ -82,6 +82,16 @@ describe('applyGuardrails', () => {
     expect(() => applyGuardrails(raw(), ctx({}, { fight: false, offer: false, accept: false }))).toThrow(AdviceUnavailableError);
   });
 
+  it('flags and caps strength when switched to FIGHT with evidence missing', () => {
+    const a = applyGuardrails(
+      raw({ recommendation: 'OFFER', evidence_strength: 'STRONG', suggested_offer_amount: 10 }),
+      ctx({ missing: ['x'] }, { offer: false, accept: false }),
+    );
+    expect(a.recommendation).toBe('FIGHT');
+    expect(a.evidenceStrength).toBe('MEDIUM');
+    expect(a.flags.filter((f) => f === 'Only FIGHT is allowed by PayPal now; evidence is incomplete')).toHaveLength(1);
+  });
+
   it('keeps a downgraded FIGHT when it is the only allowed action', () => {
     const a = applyGuardrails(raw({ evidence_strength: 'STRONG' }), ctx({ missing: ['x'] }, { offer: false, accept: false }));
     expect(a.recommendation).toBe('FIGHT');

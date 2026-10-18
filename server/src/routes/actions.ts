@@ -171,7 +171,7 @@ export function actionRoutes(deps: AppDeps): Router {
       return;
     }
     try {
-      await adjudicate(paypal, id, outcome, `dc-settle-${id}-${outcome}`);
+      await adjudicate(paypal, id, outcome, `dc-settle-${id}-${outcome}-${Date.now()}`);
     } catch (err) {
       if (err instanceof PayPalError && err.status >= 400 && err.status < 500) {
         logger.warn(`settle: PayPal refused for dispute ${maskId(id)} (${err.name})`);

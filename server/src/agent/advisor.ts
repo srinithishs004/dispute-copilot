@@ -79,13 +79,19 @@ export function applyGuardrails(raw: RawAdvice, ctx: { pack: EvidencePack; allow
     } else if (downgraded && allowed.fight) {
       // Only FIGHT is left: keep it, flagged, rather than leaving the seller with no advice.
       recommendation = 'FIGHT';
-      flags.push('Only FIGHT is allowed by PayPal now; evidence is incomplete');
     } else if (!allowed.fight) {
       throw new AdviceUnavailableError();
     } else {
       flags.push(`${recommendation} not allowed by PayPal now; switched to FIGHT`);
       recommendation = 'FIGHT';
     }
+  }
+
+  // Any path that ends on FIGHT with required evidence still missing is flagged once and capped.
+  if (recommendation === 'FIGHT' && pack.missing.length > 0) {
+    const flag = 'Only FIGHT is allowed by PayPal now; evidence is incomplete';
+    if (!flags.includes(flag)) flags.push(flag);
+    if (evidenceStrength === 'STRONG') evidenceStrength = 'MEDIUM';
   }
 
   // 3. Offer amount, in integer cents.

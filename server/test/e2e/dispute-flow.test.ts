@@ -23,9 +23,16 @@ it('webhook -> worker -> READY_FOR_REVIEW with evidence and a letter', async () 
   const db = await makeTestDb();
   opened.push(db);
   await seedStore(db);
-  const { client, calls } = fakeClient((call) =>
-    call.path.includes('verify-webhook-signature') ? { verification_status: 'SUCCESS' } : inr,
-  );
+  // Like real PayPal: once our offer is accepted, the case waits on the buyer.
+  let offered = false;
+  const { client, calls } = fakeClient((call) => {
+    if (call.path.includes('verify-webhook-signature')) return { verification_status: 'SUCCESS' };
+    if (call.path.endsWith('/make-offer')) {
+      offered = true;
+      return {};
+    }
+    return offered ? { ...inr, status: 'WAITING_FOR_BUYER_RESPONSE' } : inr;
+  });
   const letter =
     'Dear PayPal dispute team, the order was shipped with tracking number 1Z999AA10123456784 as recorded in our shipment facts. We respectfully ask that the dispute be resolved in our favour. Thank you.';
   const llm: Llm = {

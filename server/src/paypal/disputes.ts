@@ -1,4 +1,5 @@
-import type { PayPalClient } from './client.js';
+import { randomUUID } from 'node:crypto';
+import { RawBody, type PayPalClient } from './client.js';
 
 export type DisputeSummary = {
   dispute_id: string;
@@ -93,6 +94,13 @@ export function acceptClaim(
   return post(c, id, 'accept-claim', body, requestId);
 }
 
+const KNOWN_CARRIERS = new Set(['USPS', 'UPS', 'FEDEX', 'DHL']);
+
+function carrierFields(carrier: string): { carrier_name: string; carrier_name_other?: string } {
+  const code = carrier.toUpperCase().replace(/[\s-]+/g, '');
+  return KNOWN_CARRIERS.has(code) ? { carrier_name: code } : { carrier_name: 'OTHER', carrier_name_other: carrier };
+}
+
 export function provideEvidence(
   c: PayPalClient,
   id: string,
@@ -102,17 +110,19 @@ export function provideEvidence(
   const evidence: Record<string, unknown> = { evidence_type: 'PROOF_OF_FULFILLMENT' };
   if (input.tracking && input.tracking.length > 0) {
     evidence.evidence_info = {
-      tracking_info: input.tracking.map((t) => ({ carrier_name: t.carrier, tracking_number: t.number })),
+      tracking_info: input.tracking.map((t) => ({ ...carrierFields(t.carrier), tracking_number: t.number })),
     };
   }
   evidence.notes = input.notes;
-  const form = new FormData();
-  form.append(
-    'input',
-    new Blob([JSON.stringify({ evidences: [evidence] })], { type: 'application/json' }),
-    'input.json',
-  );
-  return post(c, id, 'provide-evidence', form, requestId);
+  // Hand-built multipart: a single JSON part named "input", no filename (PayPal rejects file parts here).
+  const boundary = `dc-${randomUUID().replace(/-/g, '')}`;
+  const data =
+    `--${boundary}\r\n` +
+    'Content-Disposition: form-data; name="input"\r\n' +
+    'Content-Type: application/json\r\n\r\n' +
+    `${JSON.stringify({ evidences: [evidence] })}\r\n` +
+    `--${boundary}--\r\n`;
+  return post(c, id, 'provide-evidence', new RawBody(`multipart/form-data; boundary=${boundary}`, data), requestId);
 }
 
 export function escalate(c: PayPalClient, id: string, note: string, requestId: string): Promise<unknown> {

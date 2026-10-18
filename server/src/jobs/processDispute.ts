@@ -8,6 +8,7 @@ import {
   getLocalState,
   matchOrderId,
   setLocalState,
+  setLocalStateIf,
   upsertDispute,
 } from '../disputes/repo.js';
 import { enqueue } from './queue.js';
@@ -35,7 +36,7 @@ export function processDispute(deps: ProcessDisputeDeps): JobHandler {
       const bundle = orderId ? await findOrderBundle(tx, orderId) : null;
       await upsertDispute(tx, detail, orderId);
       const current = await getLocalState(tx, detail.dispute_id);
-      const advanced = current != null && ADVANCED_STATES.includes(current);
+      let advanced = current != null && ADVANCED_STATES.includes(current);
       const closed = detail.status === 'RESOLVED';
 
       if (!bundle) {
@@ -47,7 +48,16 @@ export function processDispute(deps: ProcessDisputeDeps): JobHandler {
         return;
       }
 
-      if (!advanced && !closed) await setLocalState(tx, detail.dispute_id, 'ANALYZING');
+      // The buyer declined our offer / replied: PayPal hands the case back, so analyse it again.
+      if (
+        current === 'ACTION_SENT' &&
+        detail.status === 'WAITING_FOR_SELLER_RESPONSE' &&
+        (await setLocalStateIf(tx, detail.dispute_id, 'ACTION_SENT', 'ANALYZING'))
+      ) {
+        advanced = false;
+      } else if (!advanced && !closed) {
+        await setLocalState(tx, detail.dispute_id, 'ANALYZING');
+      }
       const pack = buildEvidencePack(detail, bundle);
       await tx.query('delete from evidence_items where dispute_id = $1', [detail.dispute_id]);
       for (const f of pack.facts) {

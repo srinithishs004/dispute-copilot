@@ -48,6 +48,8 @@ Your dispute can reach the server in two ways: the webhook (it can take a few mi
 curl -X POST -H "x-debug-token: <YOUR_DEBUG_TOKEN>" http://localhost:3000/api/disputes/sync
 ```
 
+On the deployed service, replace `http://localhost:3000` with `https://dispute-copilot-zv53.onrender.com` in every command here.
+
 Then list the disputes:
 
 ```
@@ -96,6 +98,8 @@ The `note` must be 20 to 2000 characters. Send the file:
 curl.exe -X POST -H "x-debug-token: <YOUR_DEBUG_TOKEN>" -H "Content-Type: application/json" --data "@approve.json" http://localhost:3000/api/disputes/<disputeId>/approve
 ```
 
+On the deployed service, the same call is `https://dispute-copilot-zv53.onrender.com/api/disputes/<disputeId>/approve` (and `https://dispute-copilot-zv53.onrender.com/api/disputes/<disputeId>` to fetch it again).
+
 Success: HTTP 202 with `{"actionId": ..., "state": "PENDING"}`. Fetch the dispute again after a few seconds: `localState` becomes `ACTION_SENT` and the action's `state` is `SENT`. If you get 409 `action not allowed now`, PayPal no longer offers that action; the response shows what is allowed.
 
 ## Step 5c: Settle a sandbox dispute (demo only)
@@ -110,6 +114,10 @@ In the sandbox you can make PayPal decide the case yourself, so the dispute reac
 curl.exe -X POST -H "x-debug-token: <YOUR_DEBUG_TOKEN>" -H "Content-Type: application/json" --data "@settle.json" http://localhost:3000/api/disputes/<disputeId>/sandbox/settle
 ```
 
+On the deployed service, use `https://dispute-copilot-zv53.onrender.com/api/disputes/<disputeId>/sandbox/settle` instead of the localhost address (same headers and body).
+
+To reach the claim stage: either the buyer escalates the dispute in the sandbox UI, or run locally `npm run spike:action -w server -- <disputeId> escalate`.
+
 Success: HTTP 202 `{"state":"SETTLE_REQUESTED"}`. The server re-processes the dispute, and `localState` becomes `RESOLVED` with an `outcome` once PayPal reports it. This endpoint only works against the sandbox.
 
 ## What `localState` means
@@ -121,6 +129,14 @@ Success: HTTP 202 `{"state":"SETTLE_REQUESTED"}`. The server re-processes the di
 - `RESOLVED`: PayPal closed the dispute. The `outcome` field is PayPal's outcome code, which says who won.
 
 Earlier states you may briefly see: `NEW` (just received) and `ANALYZING` (the AI is working).
+
+## Good to know
+
+- Use fresh disputes for demos. Older Phase 1 disputes keep their FIGHT-only analyses.
+- After an offer, if the buyer declines, PayPal hands the case back (`WAITING_FOR_SELLER_RESPONSE`) and the app re-analyzes it, so you can approve again.
+- If an action FAILED with "Could not reach PayPal", check the dispute in the PayPal sandbox before approving again. The first attempt may have gone through, especially FIGHT (evidence).
+- A later PayPal update re-analyzes a `NEEDS_MANUAL` dispute: the reason clears, and the failed action keeps its error in `actions`.
+- If a dispute is stuck in `ACTION_PENDING` for more than 15 minutes (the worker crashed on the last try), it needs a manual database fix. Contact the developer.
 
 ## Step 6: Check the webhook arrived
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createPayPalClient, PayPalError } from '../../src/paypal/client.js';
+import { createPayPalClient, PayPalError, RawBody } from '../../src/paypal/client.js';
 
 type Call = { url: string; init: RequestInit };
 
@@ -308,6 +308,14 @@ describe('request bodies', () => {
     expect(h['Content-Type']).toBeUndefined();
     expect(h.Authorization).toBe('Bearer tok-abc');
     expect(h['PayPal-Request-Id']).toBe('r1');
+  });
+
+  test('RawBody is sent as-is with its own Content-Type', async () => {
+    const { client, calls } = setup([tokenRes(), json(200, {})]);
+    await client.request('POST', '/v1/x', new RawBody('multipart/form-data; boundary=b', '--b--\r\n'), { 'PayPal-Request-Id': 'r1' });
+    const init = calls[1]!.init;
+    expect(init.body).toBe('--b--\r\n');
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('multipart/form-data; boundary=b');
   });
 
   test('JSON POST still gets Content-Type application/json', async () => {

@@ -295,7 +295,7 @@ describe('POST /api/disputes/:id/sandbox/settle', () => {
     const post = f.calls.find((c) => c.method === 'POST')!;
     expect(post.path).toBe(`/v1/customer/disputes/${inr.dispute_id}/adjudicate`);
     expect(post.body).toEqual({ adjudication_outcome: 'BUYER_FAVOR' });
-    expect(post.headers?.['PayPal-Request-Id']).toBe(`dc-settle-${inr.dispute_id}-BUYER_FAVOR`);
+    expect(post.headers?.['PayPal-Request-Id']).toMatch(new RegExp(`^dc-settle-${inr.dispute_id}-BUYER_FAVOR-\\d+$`));
     expect(await jobCount(db)).toBe(before + 1);
     const { rows } = await db.query<{ n: string }>(
       "select count(*) as n from disputes where raw->'links' @> '[{\"rel\":\"adjudicate\"}]' and order_id is not null",
