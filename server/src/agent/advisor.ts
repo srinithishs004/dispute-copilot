@@ -16,8 +16,8 @@ export type Advice = {
 
 /** No action (fight, offer or accept) is currently allowed by PayPal. */
 export class AdviceUnavailableError extends Error {
-  constructor() {
-    super('no dispute action is currently allowed by PayPal');
+  constructor(message = 'no dispute action is currently allowed by PayPal') {
+    super(message);
     this.name = 'AdviceUnavailableError';
   }
 }
@@ -50,6 +50,10 @@ export function applyGuardrails(raw: RawAdvice, ctx: { pack: EvidencePack; allow
   const { pack, allowed } = ctx;
   const flags: string[] = [];
 
+  if (!/^\d+(\.\d{1,2})?$/.test(pack.amount) || toCents(pack.amount) <= 0) {
+    throw new AdviceUnavailableError('invalid disputed amount');
+  }
+
   // 1. Missing evidence: pack first, de-duplicated.
   const missingEvidence = [...new Set([...pack.missing, ...raw.missing_evidence])];
 
@@ -65,14 +69,23 @@ export function applyGuardrails(raw: RawAdvice, ctx: { pack: EvidencePack; allow
     if (evidenceStrength === 'STRONG') evidenceStrength = 'MEDIUM';
   }
 
-  // 4 (checked before 3 so the offer amount is only computed for the final action).
+  // Rule 4 runs before rule 3 on purpose: the offer amount is computed only for the final action.
   const isAllowed = (a: DisputeAction) => (a === 'FIGHT' ? allowed.fight : a === 'OFFER' ? allowed.offer : allowed.accept);
   if (!isAllowed(recommendation)) {
-    const order: DisputeAction[] = downgraded ? ['OFFER', 'ACCEPT'] : ['OFFER', 'ACCEPT', 'FIGHT'];
-    const next = order.find(isAllowed);
-    if (!next) throw new AdviceUnavailableError();
-    flags.push(`${recommendation} not allowed by PayPal now; switched to ${next}`);
-    recommendation = next;
+    const next = (['OFFER', 'ACCEPT', 'FIGHT'] as DisputeAction[]).find((a) => a !== 'FIGHT' && isAllowed(a));
+    if (next) {
+      flags.push(`${recommendation} not allowed by PayPal now; switched to ${next}`);
+      recommendation = next;
+    } else if (downgraded && allowed.fight) {
+      // Only FIGHT is left: keep it, flagged, rather than leaving the seller with no advice.
+      recommendation = 'FIGHT';
+      flags.push('Only FIGHT is allowed by PayPal now; evidence is incomplete');
+    } else if (!allowed.fight) {
+      throw new AdviceUnavailableError();
+    } else {
+      flags.push(`${recommendation} not allowed by PayPal now; switched to FIGHT`);
+      recommendation = 'FIGHT';
+    }
   }
 
   // 3. Offer amount, in integer cents.

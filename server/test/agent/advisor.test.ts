@@ -78,11 +78,19 @@ describe('applyGuardrails', () => {
     expect(a.suggestedOffer).toBeNull();
   });
 
-  it('throws when nothing is allowed, and when only FIGHT remains after downgrade', () => {
+  it('throws when nothing is allowed', () => {
     expect(() => applyGuardrails(raw(), ctx({}, { fight: false, offer: false, accept: false }))).toThrow(AdviceUnavailableError);
-    expect(() => applyGuardrails(raw(), ctx({ missing: ['x'] }, { fight: true, offer: false, accept: false }))).toThrow(
-      AdviceUnavailableError,
-    );
+  });
+
+  it('keeps a downgraded FIGHT when it is the only allowed action', () => {
+    const a = applyGuardrails(raw({ evidence_strength: 'STRONG' }), ctx({ missing: ['x'] }, { offer: false, accept: false }));
+    expect(a.recommendation).toBe('FIGHT');
+    expect(a.suggestedOffer).toBeNull();
+    expect(a.flags).toEqual(['Downgraded from FIGHT: missing x', 'Only FIGHT is allowed by PayPal now; evidence is incomplete']);
+  });
+
+  it.each(['abc', '', '0.00', '-5.00', '12.345'])('rejects invalid disputed amount %j', (amount) => {
+    expect(() => applyGuardrails(raw(), ctx({ amount }))).toThrow('invalid disputed amount');
   });
 
   it('clamps and rounds confidence; caps reasons', () => {
