@@ -13,6 +13,14 @@ export class PayPalError extends Error {
   }
 }
 
+/** A pre-encoded request body (e.g. hand-built multipart); sent as-is with its own Content-Type. */
+export class RawBody {
+  constructor(
+    readonly contentType: string,
+    readonly data: string | Uint8Array,
+  ) {}
+}
+
 export type PayPalClient = {
   request<T>(
     method: 'GET' | 'POST' | 'PATCH',
@@ -144,10 +152,15 @@ export function createPayPalClient(opts: PayPalClientOptions): PayPalClient {
       const bearer = await getToken();
       const reqHeaders: Record<string, string> = { Authorization: `Bearer ${bearer}` };
       // PayPal rejects POST/PATCH without this header (415) even when there is no body.
-      if (body !== undefined || method !== 'GET') reqHeaders['Content-Type'] = 'application/json';
+      // FormData: fetch sets the multipart Content-Type (with boundary) itself.
+      const isForm = body instanceof FormData;
+      const isRaw = body instanceof RawBody;
+      if (isRaw) reqHeaders['Content-Type'] = body.contentType;
+      else if (!isForm && (body !== undefined || method !== 'GET')) reqHeaders['Content-Type'] = 'application/json';
       Object.assign(reqHeaders, headers);
       const init: RequestInit = { method, headers: reqHeaders };
-      if (body !== undefined) init.body = JSON.stringify(body);
+      if (isRaw) init.body = body.data as BodyInit;
+      else if (body !== undefined) init.body = isForm ? body : JSON.stringify(body);
 
       const { res, body: parsed } = await send(`${baseUrl}${path}`, init);
       if (res.ok) return parsed as T;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createPayPalClient, PayPalError } from '../../src/paypal/client.js';
+import { createPayPalClient, PayPalError, RawBody } from '../../src/paypal/client.js';
 
 type Call = { url: string; init: RequestInit };
 
@@ -293,5 +293,35 @@ describe('hardening', () => {
     await client.request('GET', '/a');
     expect(calls[0]!.init.signal).toBeInstanceOf(AbortSignal);
     expect(calls[1]!.init.signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe('request bodies', () => {
+  test('FormData is passed to fetch unchanged with no Content-Type set by us', async () => {
+    const { client, calls } = setup([tokenRes(), json(200, {})]);
+    const fd = new FormData();
+    fd.append('input', new Blob(['{"a":1}'], { type: 'application/json' }), 'input.json');
+    await client.request('POST', '/v1/x', fd, { 'PayPal-Request-Id': 'r1' });
+    const init = calls[1]!.init;
+    expect(init.body).toBe(fd);
+    const h = init.headers as Record<string, string>;
+    expect(h['Content-Type']).toBeUndefined();
+    expect(h.Authorization).toBe('Bearer tok-abc');
+    expect(h['PayPal-Request-Id']).toBe('r1');
+  });
+
+  test('RawBody is sent as-is with its own Content-Type', async () => {
+    const { client, calls } = setup([tokenRes(), json(200, {})]);
+    await client.request('POST', '/v1/x', new RawBody('multipart/form-data; boundary=b', '--b--\r\n'), { 'PayPal-Request-Id': 'r1' });
+    const init = calls[1]!.init;
+    expect(init.body).toBe('--b--\r\n');
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('multipart/form-data; boundary=b');
+  });
+
+  test('JSON POST still gets Content-Type application/json', async () => {
+    const { client, calls } = setup([tokenRes(), json(200, {})]);
+    await client.request('POST', '/v1/x', { a: 1 });
+    expect((calls[1]!.init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(calls[1]!.init.body).toBe('{"a":1}');
   });
 });

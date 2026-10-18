@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   if (config.runWorkerInline) {
     workerLoop = startWorker({
       db,
-      handlers: buildHandlers({ db, paypal, llm, now: () => new Date() }),
+      handlers: buildHandlers({ db, paypal, llm, now: () => new Date(), storeName: config.storeName }),
       now: () => new Date(),
       logger: console,
       signal: abort.signal,

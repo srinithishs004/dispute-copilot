@@ -15,7 +15,8 @@
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "spike:order": "tsx scripts/order.ts",
     "spike:capture": "tsx scripts/capture.ts",
-    "spike:disputes": "tsx scripts/disputes.ts"
+    "spike:disputes": "tsx scripts/disputes.ts",
+    "spike:action": "tsx scripts/actions.ts"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

@@ -17,9 +17,9 @@ afterEach(async () => {
   db = undefined;
 });
 
-test('migrate applies 001_init.sql once and creates every table', async () => {
+test('migrate applies migrations once and creates every table', async () => {
   db = await createDb({ databaseUrl: null, pgliteDir: null });
-  expect(await migrate(db)).toEqual(['001_init.sql']);
+  expect(await migrate(db)).toEqual(['001_init.sql', '002_phase2.sql']);
   const { rows } = await db.query<{ table_name: string }>(
     `select table_name from information_schema.tables where table_schema = 'public'`,
   );

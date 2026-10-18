@@ -176,6 +176,15 @@ Guardrails in code (AI can't override):
 
 **Human in the loop:** nothing is sent to PayPal until the seller clicks Approve.
 
+### Phase 2 decisions
+
+- **Guardrail order** (code, the AI cannot override): (1) missing required evidence is checked against the union of what PayPal requests and what the reason needs; (2) FIGHT with missing evidence is downgraded, and the evidence strength is capped; (4) the allowed-action switch (only actions PayPal currently offers via `links[]`) runs before (3) the offer-amount check, so an offer amount is only validated for an action that is still possible. If FIGHT is the only allowed action it is kept, with a flag, instead of being downgraded to something PayPal would refuse.
+- **`analyzeDispute`** replaces the Phase 1 letter job. It produces the recommendation and the letter together. The old `draftLetter` job name stays as a legacy alias so queued jobs still run.
+- **Approval is API-only** (`POST /api/disputes/:id/approve`) until the Phase 3 review screen. Nothing is sent to PayPal before it.
+- **Idempotency key** for the PayPal call is `dc-action-<actionId>`, so a retry never sends the action twice. Settle uses `dc-settle-<disputeId>-<outcome>`.
+- **State transitions are conditional (compare-and-set):** e.g. `READY_FOR_REVIEW` to `ACTION_PENDING` only succeeds if the dispute is still in the expected state, inside the same transaction as the action row and job. Concurrent approves therefore produce one winner and one 409.
+- **Sandbox settle** (`POST /api/disputes/:id/sandbox/settle`) calls PayPal's adjudicate only when the fresh dispute has an `adjudicate` link.
+
 ## 10. PayPal integration
 
 - REST API with OAuth client credentials (sandbox), token cached until expiry.
@@ -212,6 +221,16 @@ Activity → payment → Report a problem → "I haven't received the item or se
 - Delay: dispute opened 00:26:23 → CREATED received 00:29:41 (~3 min); UPDATED followed ~20 s later.
 - Webhook payload links use the host `api.sandbox.paypal.com` (not `api-m.`); our client ignores them and builds URLs from `PAYPAL_BASE_URL`.
 - Free Render service slept between tests; keep `/health` warm before demos, and events must be stored durably (Phase 1 database).
+
+### Phase 2 findings (sandbox, Oct 18)
+
+- `show` on an **INQUIRY** dispute lists the links `send_message`, `provide_evidence`, `accept_claim`, `make_offer`, `escalate`. There is no `adjudicate` link.
+- `make-offer` with `{note, offer_amount, offer_type: REFUND}` succeeded. Status went to `UNDER_REVIEW` and then `WAITING_FOR_BUYER_RESPONSE`; the stage stays `INQUIRY`.
+- After an offer the `make_offer` link disappears and `accept_claim_types` becomes `[REFUND]` only.
+- `adjudicate` is only offered for disputes under review in the claim stage (per PayPal docs). So settle on a fresh inquiry returns 409 until the case is escalated or reaches the claim stage.
+- **provide-evidence (Oct 19, hand-built multipart, `input` part as `application/json`, carrier code `USPS`) succeeded** on an INQUIRY dispute. It moved the case straight to stage `CHARGEBACK`, status `UNDER_REVIEW`, with no seller links left (PayPal is now reviewing).
+- `escalate` after that → 422 `ACTION_NOT_ALLOWED_IN_CURRENT_DISPUTE_STATE` (already past inquiry) — expected.
+- `adjudicate` (settle) on that `UNDER_REVIEW` / `CHARGEBACK` dispute → 400 `ACTION_NOT_ALLOWED_IN_CURRENT_DISPUTE_STATE`, and no `adjudicate` link is listed. Other developers report the same sandbox behaviour with no published fix. **Decision:** settle stays best-effort (the endpoint returns 409 with a hint when PayPal offers no link). For the demo outcome, use paths that resolve without adjudication: the buyer accepts the seller's offer in the sandbox UI, or the seller accepts the claim (full refund); both should arrive as `CUSTOMER.DISPUTE.RESOLVED` and show `outcome`. Re-check the FIGHT case later in case the sandbox adds the link after a delay.
 
 ## 11. Error handling
 

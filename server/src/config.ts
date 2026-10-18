@@ -15,6 +15,8 @@ export interface Config {
   runWorkerInline: boolean;
   /** Public origin of this server; PayPal sends buyers back to it. */
   publicBaseUrl: string;
+  /** Store name the AI signs buyer and PayPal letters with. */
+  storeName: string;
   llm: {
     gemini: { apiKey: string | null; model: string };
     groq: { apiKey: string | null; model: string };
@@ -47,6 +49,7 @@ const EnvSchema = z.object({
   RUN_WORKER_INLINE: z.preprocess(blankToUndefined, z.enum(['true', 'false']).optional()),
   PGLITE_DIR: z.preprocess(blankToUndefined, z.string().default('.data/pglite')),
   PUBLIC_BASE_URL: z.preprocess(blankToUndefined, z.string().url().default('http://localhost:3000')),
+  STORE_NAME: z.preprocess(blankToUndefined, z.string().default('Dispute Copilot Demo Store')),
   GEMINI_API_KEY: optional,
   GEMINI_MODEL: z.preprocess(blankToUndefined, z.string().default('gemini-3.6-flash')),
   GROQ_API_KEY: optional,
@@ -75,6 +78,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     pgliteDir: e.PGLITE_DIR,
     runWorkerInline: e.RUN_WORKER_INLINE === undefined ? e.DATABASE_URL === undefined : e.RUN_WORKER_INLINE === 'true',
     publicBaseUrl: e.PUBLIC_BASE_URL.replace(/\/+$/, ''),
+    storeName: e.STORE_NAME,
     llm: {
       gemini: { apiKey: e.GEMINI_API_KEY ?? null, model: e.GEMINI_MODEL },
       groq: { apiKey: e.GROQ_API_KEY ?? null, model: e.GROQ_MODEL },

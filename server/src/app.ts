@@ -2,6 +2,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import type { Db } from './db/db.js';
 import type { Config } from './config.js';
 import type { PayPalClient } from './paypal/client.js';
+import { actionRoutes } from './routes/actions.js';
 import { disputeRoutes } from './routes/disputes.js';
 import { storeRoutes } from './routes/store.js';
 import { webhookRoutes } from './routes/webhooks.js';
@@ -39,6 +40,7 @@ export function createApp(deps: AppDeps): express.Express {
   });
   app.use(webhookRoutes(deps));
   app.use(disputeRoutes(deps));
+  app.use(actionRoutes(deps));
   app.use(storeRoutes(deps));
   // Final error handler: JSON only, and never log the request body or the stack.
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

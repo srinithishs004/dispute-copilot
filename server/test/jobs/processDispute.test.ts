@@ -28,7 +28,7 @@ const n = async (db: Awaited<ReturnType<typeof makeTestDb>>, sql: string) =>
   Number((await db.query<{ n: string }>(sql)).rows[0]!.n);
 
 describe('processDispute', () => {
-  it('syncs, links the order, stores evidence, sets ANALYZING, enqueues one draftLetter', async () => {
+  it('syncs, links the order, stores evidence, sets ANALYZING, enqueues one analyzeDispute', async () => {
     const { db, run, calls } = await setup(inr);
     await run();
     expect(calls[0]!.path).toContain('PP-R-ICQ-00000001');
@@ -51,17 +51,17 @@ describe('processDispute', () => {
       description: 'Tracking number: 1Z999AA10123456784',
       file_path: null,
     });
-    expect(await n(db, "select count(*) as n from jobs where type = 'draftLetter'")).toBe(1);
+    expect(await n(db, "select count(*) as n from jobs where type = 'analyzeDispute'")).toBe(1);
   });
 
-  it('delays the draftLetter job by about 60 s', async () => {
+  it('delays the analyzeDispute job by about 60 s', async () => {
     const { db, run } = await setup(inr);
     await run();
-    const r = (await db.query<{ run_at: string }>("select run_at from jobs where type = 'draftLetter'")).rows[0]!;
+    const r = (await db.query<{ run_at: string }>("select run_at from jobs where type = 'analyzeDispute'")).rows[0]!;
     expect(new Date(r.run_at).getTime() - new Date('2026-10-15T00:00:00Z').getTime()).toBe(60_000);
   });
 
-  it('closed (RESOLVED) dispute: sets RESOLVED, stores evidence, no draftLetter', async () => {
+  it('closed (RESOLVED) dispute: sets RESOLVED, stores evidence, no analyzeDispute', async () => {
     const detail = structuredClone(inr);
     detail.status = 'RESOLVED';
     const { db, run } = await setup(detail);
@@ -69,20 +69,30 @@ describe('processDispute', () => {
     const d = (await db.query<{ local_state: string; order_id: string }>('select local_state, order_id from disputes')).rows[0]!;
     expect(d).toMatchObject({ local_state: 'RESOLVED', order_id: 'DEMO-HIST-02' });
     expect(await n(db, 'select count(*) as n from evidence_items')).toBeGreaterThan(0);
-    expect(await n(db, "select count(*) as n from jobs where type = 'draftLetter'")).toBe(0);
+    expect(await n(db, "select count(*) as n from jobs where type = 'analyzeDispute'")).toBe(0);
   });
 
-  it('is idempotent: same evidence count and no second draftLetter while one is queued/running', async () => {
+  it('is idempotent: same evidence count and no second analyzeDispute while one is queued/running', async () => {
     const { db, run } = await setup(inr);
     await run();
     const count = await n(db, 'select count(*) as n from evidence_items');
     expect(count).toBeGreaterThan(0);
     await run();
     expect(await n(db, 'select count(*) as n from evidence_items')).toBe(count);
-    expect(await n(db, "select count(*) as n from jobs where type = 'draftLetter'")).toBe(1);
+    expect(await n(db, "select count(*) as n from jobs where type = 'analyzeDispute'")).toBe(1);
     await db.query("update jobs set state = 'running'");
     await run();
-    expect(await n(db, "select count(*) as n from jobs where type = 'draftLetter'")).toBe(1);
+    expect(await n(db, "select count(*) as n from jobs where type = 'analyzeDispute'")).toBe(1);
+  });
+
+  it('treats a queued legacy draftLetter job as pending', async () => {
+    const { db, run } = await setup(inr);
+    await db.query(
+      "insert into jobs (type, payload, state, run_at) values ('draftLetter', $1::jsonb, 'queued', now())",
+      [JSON.stringify({ disputeId: inr.dispute_id })],
+    );
+    await run();
+    expect(await n(db, "select count(*) as n from jobs where type = 'analyzeDispute'")).toBe(0);
   });
 
   it('matches by capture id when the invoice is unknown', async () => {
@@ -96,14 +106,14 @@ describe('processDispute', () => {
     );
   });
 
-  it('unknown invoice and capture: NEEDS_MANUAL, no draftLetter', async () => {
+  it('unknown invoice and capture: NEEDS_MANUAL, no analyzeDispute', async () => {
     const detail = structuredClone(inr);
     detail.disputed_transactions![0]!.invoice_number = 'NOPE';
     const { db, run } = await setup(detail);
     await run();
     const d = (await db.query<Record<string, unknown>>('select * from disputes')).rows[0]!;
     expect(d).toMatchObject({ local_state: 'NEEDS_MANUAL', manual_reason: 'no matching order', order_id: null });
-    expect(await n(db, "select count(*) as n from jobs where type = 'draftLetter'")).toBe(0);
+    expect(await n(db, "select count(*) as n from jobs where type = 'analyzeDispute'")).toBe(0);
   });
 
   it('keeps READY_FOR_REVIEW on re-sync', async () => {
@@ -115,6 +125,35 @@ describe('processDispute', () => {
     expect((await db.query<{ local_state: string }>('select local_state from disputes')).rows[0]!.local_state).toBe(
       'READY_FOR_REVIEW',
     );
-    expect(await n(db, "select count(*) as n from jobs where type = 'draftLetter'")).toBe(0);
+    expect(await n(db, "select count(*) as n from jobs where type = 'analyzeDispute'")).toBe(0);
+  });
+
+  describe('PayPal hands the case back', () => {
+    const cases: [string, string, string, number][] = [
+      ['ACTION_SENT', 'WAITING_FOR_SELLER_RESPONSE', 'ANALYZING', 1],
+      ['ACTION_SENT', 'WAITING_FOR_BUYER_RESPONSE', 'ACTION_SENT', 0],
+      ['ACTION_PENDING', 'WAITING_FOR_SELLER_RESPONSE', 'ACTION_PENDING', 0],
+    ];
+    for (const [from, status, to, jobs] of cases) {
+      it(`${from} + ${status} -> ${to}, ${jobs} analyzeDispute job(s)`, async () => {
+        const detail = structuredClone(inr);
+        detail.status = status;
+        const { db, run } = await setup(detail);
+        try {
+          await run();
+          await setLocalState(db, inr.dispute_id, from as never);
+          await db.query('delete from jobs');
+          await run();
+          expect((await db.query<{ local_state: string }>('select local_state from disputes')).rows[0]!.local_state).toBe(to);
+          expect(await n(db, "select count(*) as n from jobs where type = 'analyzeDispute'")).toBe(jobs);
+          if (jobs) {
+            const r = (await db.query<{ run_at: string }>("select run_at from jobs where type = 'analyzeDispute'")).rows[0]!;
+            expect(new Date(r.run_at).getTime() - new Date('2026-10-15T00:00:00Z').getTime()).toBe(60_000);
+          }
+        } finally {
+          await db.close();
+        }
+      });
+    }
   });
 });

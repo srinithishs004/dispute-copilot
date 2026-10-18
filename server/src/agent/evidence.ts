@@ -19,6 +19,15 @@ const REQUIREMENTS: Record<string, string[]> = {
 };
 const DEFAULT_REQUIREMENTS = ['order record', 'buyer communication'];
 
+const DATE_FMT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+
+/** Readable UTC date for facts shown to the AI and the buyer; unparseable input is returned unchanged. */
+export function formatFactDate(v: string | Date): string {
+  const d = v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? String(v) : DATE_FMT.format(d);
+}
+const fmt = (v: string | Date | null | undefined) => (v == null || v === '' ? v : formatFactDate(v));
+
 export function buildEvidencePack(detail: DisputeDetail, bundle: OrderBundle): EvidencePack {
   const { order, shipments, messages, policy } = bundle;
   const facts: Fact[] = [];
@@ -29,14 +38,14 @@ export function buildEvidencePack(detail: DisputeDetail, bundle: OrderBundle): E
   add('order.id', 'Order ID', order.id);
   add('order.item', 'Item', order.item);
   add('order.amount', 'Order amount', order.amount && `${order.amount} ${order.currency ?? ''}`.trim());
-  add('order.created_at', 'Order placed at', order.createdAt);
+  add('order.created_at', 'Order placed at', fmt(order.createdAt));
 
   shipments.forEach((s, i) => {
     add(`shipment.${i}.carrier`, 'Carrier', s.carrier);
     add(`shipment.${i}.tracking`, 'Tracking number', s.trackingNumber);
     add(`shipment.${i}.status`, 'Shipment status', s.status);
-    add(`shipment.${i}.shipped_at`, 'Shipped at', s.shippedAt);
-    add(`shipment.${i}.delivered_at`, 'Delivered at', s.deliveredAt);
+    add(`shipment.${i}.shipped_at`, 'Shipped at', fmt(s.shippedAt));
+    add(`shipment.${i}.delivered_at`, 'Delivered at', fmt(s.deliveredAt));
     if (s.signatureProof) add(`shipment.${i}.signature`, 'Signature on delivery', 'Signature proof on file');
   });
 
@@ -52,7 +61,7 @@ export function buildEvidencePack(detail: DisputeDetail, bundle: OrderBundle): E
 
   const present: Record<string, boolean> = {
     'tracking number': shipments.some((s) => !!s.trackingNumber),
-    'delivery confirmation': shipments.some((s) => !!s.deliveredAt),
+    'delivery confirmation': shipments.some((s) => !!fmt(s.deliveredAt)),
     'signature on delivery': shipments.some((s) => s.signatureProof),
     'item description': !!order.item?.trim(),
     'buyer communication': messages.some((m) => m.sender === 'buyer') || buyerMsgs.length > 0,
