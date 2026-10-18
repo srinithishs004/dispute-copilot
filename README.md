@@ -2,7 +2,7 @@
 
 Dispute Copilot is a PayPal disputes assistant for small sellers, built for the PayPal AI Hackathon. It talks to the PayPal sandbox APIs to help sellers understand and respond to disputes. It uses the sandbox only: no real money and no real customers.
 
-## How it works now (Phase 1)
+## How it works now (Phase 1 and 2)
 
 1. A buyer pays for an item in the demo store at `/store` (PayPal sandbox checkout).
 2. The buyer opens a dispute in the PayPal sandbox.
@@ -12,8 +12,7 @@ Dispute Copilot is a PayPal disputes assistant for small sellers, built for the 
 
 Things to know:
 
-- **The AI never calls PayPal.** Nothing is sent to PayPal on the seller's behalf in this phase.
-- **The letter is written for the FIGHT stance only.** A later phase adds an advisor that picks fight, offer or accept.
+- **The AI never calls PayPal.** Nothing is sent to PayPal until you call `POST /api/disputes/<id>/approve`. The advisor recommends fight, offer or accept; you decide. Approval is API-only until the Phase 3 review screen.
 - **The job queue is a Postgres table** called `jobs`, not an external queue. A job is locked while a worker runs it (5 minute lease) and is tried up to 3 times, 30 seconds apart.
 - **If no AI key works**, the dispute ends in `NEEDS_MANUAL` with the reason "AI draft unavailable".
 
@@ -46,6 +45,7 @@ Set these in `.env` at the repo root (a blank value counts as not set). Never co
 | `GEMINI_MODEL` | `gemini-3.6-flash` | Gemini model name. |
 | `GROQ_API_KEY` | none | Groq key. Used if Gemini fails or has no key. |
 | `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model name. |
+| `STORE_NAME` | `Dispute Copilot Demo Store` | Store name the AI letter signs off with (the seller name used in the letter). |
 
 You need at least one of `GEMINI_API_KEY` or `GROQ_API_KEY` to get a letter. A provider without a key is skipped.
 
@@ -67,7 +67,9 @@ You need at least one of `GEMINI_API_KEY` or `GROQ_API_KEY` to get a letter. A p
 | `GET /debug/events` | yes | The last 50 webhook events. |
 | `POST /api/disputes/sync` | yes | Pulls disputes from PayPal and queues them. Use it if a webhook is slow. |
 | `GET /api/disputes` | yes | List of disputes. |
-| `GET /api/disputes/<id>` | yes | One dispute with its evidence pack and latest letter. |
+| `GET /api/disputes/<id>` | yes | One dispute with its evidence pack, latest recommendation and letter, allowed actions and action history. |
+| `POST /api/disputes/<id>/approve` | yes | Seller approval. Body `{action, note, offerAmount?}` with action `FIGHT`, `OFFER` or `ACCEPT`. Queues the PayPal call (202). |
+| `POST /api/disputes/<id>/sandbox/settle` | yes | Sandbox demo only. Body `{outcome}` with `SELLER_FAVOR` or `BUYER_FAVOR`. 202 if PayPal allows settling, otherwise 409 with a hint. |
 
 Send the token in the `x-debug-token` header. Example:
 

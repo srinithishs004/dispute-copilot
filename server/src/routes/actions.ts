@@ -4,12 +4,15 @@ import { ActionConflictError, createPendingAction, type ActionPayload } from '..
 import { claimForAction, upsertDispute } from '../disputes/repo.js';
 import { enqueue } from '../jobs/queue.js';
 import { maskId } from '../log.js';
-import { allowedActions, getDispute, type DisputeAction } from '../paypal/disputes.js';
+import { PayPalError } from '../paypal/client.js';
+import { adjudicate, allowedActions, getDispute, type DisputeAction } from '../paypal/disputes.js';
 import { findOrderBundle } from '../store/repo.js';
 import { makeRequireDebugToken } from './webhooks.js';
 
 const ACTIONS: readonly DisputeAction[] = ['FIGHT', 'OFFER', 'ACCEPT'];
 const AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
+const OUTCOMES = ['SELLER_FAVOR', 'BUYER_FAVOR'] as const;
+const SETTLE_HINT = 'PayPal only allows settling disputes under review; escalate or wait for the claim stage';
 const NOTE_MIN = 20;
 const NOTE_MAX = 2000;
 
@@ -131,6 +134,57 @@ export function actionRoutes(deps: AppDeps): Router {
       }
       throw err;
     }
+  });
+
+  // Sandbox-only demo helper: the sandbox base-URL check in config guarantees this never reaches live PayPal.
+  router.post('/api/disputes/:id/sandbox/settle', guard, async (req, res) => {
+    const id = String(req.params.id);
+    const row = (
+      await db.query<{ order_id: string | null }>('select order_id from disputes where paypal_dispute_id = $1', [id])
+    ).rows[0];
+    if (!row) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    const body = (typeof req.body === 'object' && req.body !== null ? req.body : {}) as Record<string, unknown>;
+    const outcome = OUTCOMES.find((o) => o === body.outcome);
+    if (!outcome) {
+      res.status(400).json({ error: 'outcome must be SELLER_FAVOR or BUYER_FAVOR' });
+      return;
+    }
+    let fresh;
+    try {
+      fresh = await getDispute(paypal, id);
+    } catch {
+      logger.warn(`settle: could not fetch dispute ${maskId(id)} from PayPal`);
+      res.status(502).json({ error: 'could not reach PayPal' });
+      return;
+    }
+    await upsertDispute(db, fresh, row.order_id);
+    if (!allowedActions(fresh).adjudicate) {
+      res.status(409).json({
+        error: 'not settleable yet',
+        status: fresh.status ?? null,
+        stage: fresh.dispute_life_cycle_stage ?? null,
+        hint: SETTLE_HINT,
+      });
+      return;
+    }
+    try {
+      await adjudicate(paypal, id, outcome, `dc-settle-${id}-${outcome}`);
+    } catch (err) {
+      if (err instanceof PayPalError && err.status >= 400 && err.status < 500) {
+        logger.warn(`settle: PayPal refused for dispute ${maskId(id)} (${err.name})`);
+        res.status(409).json({ error: 'PayPal refused to settle', name: err.name });
+        return;
+      }
+      logger.warn(`settle: PayPal call failed for dispute ${maskId(id)}`);
+      res.status(502).json({ error: 'could not reach PayPal' });
+      return;
+    }
+    await enqueue(db, 'processDispute', { disputeId: id });
+    logger.info(`settle: ${outcome} requested for dispute ${maskId(id)}`);
+    res.status(202).json({ state: 'SETTLE_REQUESTED' });
   });
 
   return router;

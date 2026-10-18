@@ -240,3 +240,87 @@ describe('POST /api/disputes/:id/approve', () => {
     expect(await counts(db)).toEqual({ actions: 1, jobs: 1 });
   });
 });
+
+describe('POST /api/disputes/:id/sandbox/settle', () => {
+  const SETTLE = `/api/disputes/${inr.dispute_id}/sandbox/settle`;
+  const withAdjudicate = {
+    ...inr,
+    links: [
+      ...(inr.links ?? []),
+      { href: 'https://api-m.sandbox.paypal.com/x/adjudicate', rel: 'adjudicate', method: 'POST' },
+    ],
+  };
+  const jobCount = async (db: Awaited<ReturnType<typeof setup>>['db']) =>
+    Number((await db.query<{ n: string }>("select count(*) as n from jobs where type = 'processDispute'")).rows[0]!.n);
+
+  it('401 without the token, 404 for an unknown dispute', async () => {
+    const { app } = await setup();
+    expect((await request(app).post(SETTLE).send({ outcome: 'SELLER_FAVOR' })).status).toBe(401);
+    const res = await request(app).post('/api/disputes/nope/sandbox/settle').set(H).send({ outcome: 'SELLER_FAVOR' });
+    expect(res.status).toBe(404);
+  });
+
+  it('400 for a bad outcome', async () => {
+    const { app } = await setup({ fresh: withAdjudicate });
+    for (const body of [{}, { outcome: 'REFUND' }, { outcome: 1 }]) {
+      expect((await request(app).post(SETTLE).set(H).send(body)).status).toBe(400);
+    }
+  });
+
+  it('409 with a hint when PayPal offers no adjudicate link', async () => {
+    const f = fakeClient(inr);
+    const { db } = await setup();
+    const app = createApp(makeTestDeps({ db, paypal: f.client }));
+    const before = await jobCount(db);
+    const res = await request(app).post(SETTLE).set(H).send({ outcome: 'SELLER_FAVOR' });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      error: 'not settleable yet',
+      status: inr.status,
+      stage: inr.dispute_life_cycle_stage,
+      hint: 'PayPal only allows settling disputes under review; escalate or wait for the claim stage',
+    });
+    expect(f.calls.some((c) => c.path.endsWith('/adjudicate'))).toBe(false);
+    expect(await jobCount(db)).toBe(before);
+  });
+
+  it('202: adjudicates with an idempotency key, refreshes raw, queues processDispute', async () => {
+    const f = fakeClient((c) => (c.method === 'GET' ? withAdjudicate : {}));
+    const { db } = await setup();
+    const app = createApp(makeTestDeps({ db, paypal: f.client }));
+    const before = await jobCount(db);
+    const res = await request(app).post(SETTLE).set(H).send({ outcome: 'BUYER_FAVOR' });
+    expect(res.status).toBe(202);
+    expect(res.body).toEqual({ state: 'SETTLE_REQUESTED' });
+    const post = f.calls.find((c) => c.method === 'POST')!;
+    expect(post.path).toBe(`/v1/customer/disputes/${inr.dispute_id}/adjudicate`);
+    expect(post.body).toEqual({ adjudication_outcome: 'BUYER_FAVOR' });
+    expect(post.headers?.['PayPal-Request-Id']).toBe(`dc-settle-${inr.dispute_id}-BUYER_FAVOR`);
+    expect(await jobCount(db)).toBe(before + 1);
+    const { rows } = await db.query<{ n: string }>(
+      "select count(*) as n from disputes where raw->'links' @> '[{\"rel\":\"adjudicate\"}]' and order_id is not null",
+    );
+    expect(Number(rows[0]!.n)).toBe(1);
+  });
+
+  it('502 when PayPal cannot be reached; 409 when PayPal refuses the adjudication', async () => {
+    const down: PayPalClient = { request: () => Promise.reject(new PayPalError(500, 'X', 'm', null, null)) };
+    const a = await setup({ paypal: down });
+    const r1 = await request(a.app).post(SETTLE).set(H).send({ outcome: 'SELLER_FAVOR' });
+    expect(r1.status).toBe(502);
+    expect(r1.body).toEqual({ error: 'could not reach PayPal' });
+
+    const refusing: PayPalClient = {
+      request: async <T,>(method: string) => {
+        if (method === 'GET') return withAdjudicate as T;
+        throw new PayPalError(422, 'DISPUTE_NOT_ELIGIBLE', 'secret', 'dbg', { a: 1 });
+      },
+    };
+    const b = await setup({ paypal: refusing });
+    const before = await jobCount(b.db);
+    const r2 = await request(b.app).post(SETTLE).set(H).send({ outcome: 'SELLER_FAVOR' });
+    expect(r2.status).toBe(409);
+    expect(r2.body).toEqual({ error: 'PayPal refused to settle', name: 'DISPUTE_NOT_ELIGIBLE' });
+    expect(await jobCount(b.db)).toBe(before);
+  });
+});

@@ -66,6 +66,62 @@ The old script `npm run spike:disputes -w server` still prints the raw dispute J
 
 Warning: the raw JSON may contain sandbox buyer and seller names and email addresses. They are fake, but they still look like personal data. Redact them before pasting output into chat or Discord, or committing it.
 
+## Step 5b: Approve an action (fight, offer or accept)
+
+Once `localState` is `READY_FOR_REVIEW`, read `latestAnalysis` (the AI's recommendation) and `allowedActions` (what PayPal currently lets you do). Then you decide. Nothing goes to PayPal until you call approve. Approval is API-only for now; the review screen comes in Phase 3.
+
+In PowerShell, quoting JSON on the command line breaks easily. Write the body to a file first, then send the file. Use `curl.exe` (with the `.exe`), because plain `curl` in PowerShell is a different command.
+
+Fight (send our evidence). Save as `approve.json`:
+
+```
+{ "action": "FIGHT", "note": "Parcel was delivered on time; tracking and delivery confirmation attached." }
+```
+
+Offer (a partial refund). `offerAmount` is a string, more than 0 and less than the disputed amount:
+
+```
+{ "action": "OFFER", "note": "Offering a partial refund to settle this quickly.", "offerAmount": "12.50" }
+```
+
+Accept (refund the buyer in full):
+
+```
+{ "action": "ACCEPT", "note": "Accepting the claim and refunding the buyer in full." }
+```
+
+The `note` must be 20 to 2000 characters. Send the file:
+
+```
+curl.exe -X POST -H "x-debug-token: <YOUR_DEBUG_TOKEN>" -H "Content-Type: application/json" --data "@approve.json" http://localhost:3000/api/disputes/<disputeId>/approve
+```
+
+Success: HTTP 202 with `{"actionId": ..., "state": "PENDING"}`. Fetch the dispute again after a few seconds: `localState` becomes `ACTION_SENT` and the action's `state` is `SENT`. If you get 409 `action not allowed now`, PayPal no longer offers that action; the response shows what is allowed.
+
+## Step 5c: Settle a sandbox dispute (demo only)
+
+In the sandbox you can make PayPal decide the case yourself, so the dispute reaches `RESOLVED`. PayPal only offers this for disputes under review in the claim stage, so a fresh inquiry usually answers 409 `not settleable yet` with a hint. Save as `settle.json` (`SELLER_FAVOR` or `BUYER_FAVOR`):
+
+```
+{ "outcome": "SELLER_FAVOR" }
+```
+
+```
+curl.exe -X POST -H "x-debug-token: <YOUR_DEBUG_TOKEN>" -H "Content-Type: application/json" --data "@settle.json" http://localhost:3000/api/disputes/<disputeId>/sandbox/settle
+```
+
+Success: HTTP 202 `{"state":"SETTLE_REQUESTED"}`. The server re-processes the dispute, and `localState` becomes `RESOLVED` with an `outcome` once PayPal reports it. This endpoint only works against the sandbox.
+
+## What `localState` means
+
+- `READY_FOR_REVIEW`: the AI has finished. A recommendation is waiting for you to approve or change.
+- `ACTION_PENDING`: you approved. The action is saved and queued but not yet sent to PayPal.
+- `ACTION_SENT`: PayPal accepted the action. We are waiting for PayPal and the buyer to respond.
+- `NEEDS_MANUAL`: something needs a human. Read `manualReason` (for example "AI draft unavailable", or PayPal rejected the action). You can still call approve from this state.
+- `RESOLVED`: PayPal closed the dispute. The `outcome` field is PayPal's outcome code, which says who won.
+
+Earlier states you may briefly see: `NEW` (just received) and `ANALYZING` (the AI is working).
+
 ## Step 6: Check the webhook arrived
 
 PayPal cannot reach `localhost`, so locally you will not see webhooks unless you expose your machine with a tunnel; use the sync command from step 5 instead. On the deployed Render service, check soon after opening the dispute. Events are saved in the database. Locally they survive restarts. On Render the data lives in Render Postgres, so it survives the service sleeping and redeploys. Use the `curl` command from step 7 of the deploy section below; a plain browser visit returns 401 because the endpoint needs the `x-debug-token` header, and it returns 404 if `DEBUG_TOKEN` is not set on the service.
