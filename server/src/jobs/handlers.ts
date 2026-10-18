@@ -1,6 +1,7 @@
 import type { Llm } from '../ai/llm.js';
 import type { Db } from '../db/db.js';
 import type { PayPalClient } from '../paypal/client.js';
+import { executeActionJob } from './executeAction.js';
 import { analyzeDisputeJob } from './analyzeDispute.js';
 import { processDispute } from './processDispute.js';
 import type { JobHandler } from './worker.js';
@@ -20,5 +21,6 @@ export function buildHandlers(deps: HandlerDeps): Record<string, JobHandler> {
     analyzeDispute: analyze,
     // Alias for jobs queued before this type was renamed.
     draftLetter: analyze,
+    executeAction: executeActionJob({ db: deps.db, paypal: deps.paypal, now: deps.now }),
   };
 }

@@ -96,3 +96,19 @@ export async function claimForAction(tx: Db, disputeId: string): Promise<boolean
   );
   return rows.length > 0;
 }
+
+/** Moves a dispute from `from` to `to` only if it is still in `from`. Returns false when it had already moved on. */
+export async function setLocalStateIf(
+  db: Db,
+  disputeId: string,
+  from: LocalState,
+  to: LocalState,
+  manualReason?: string,
+): Promise<boolean> {
+  const res = await db.query(
+    `update disputes set local_state = $3, manual_reason = $4, updated_at = now()
+     where paypal_dispute_id = $1 and local_state = $2 returning 1`,
+    [disputeId, from, to, manualReason ?? null],
+  );
+  return res.rows.length > 0;
+}

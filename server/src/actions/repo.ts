@@ -73,15 +73,23 @@ export async function createPendingAction(
   }
 }
 
-export async function markSent(db: Db, id: number, response: unknown, now: Date): Promise<void> {
-  await db.query(
-    `update actions set state = 'SENT', paypal_response = $2::jsonb, error = null, sent_at = $3 where id = $1`,
+/** Marks a PENDING action SENT. Returns false when it was no longer PENDING (nothing changed). */
+export async function markSent(db: Db, id: number, response: unknown, now: Date): Promise<boolean> {
+  const res = await db.query(
+    `update actions set state = 'SENT', paypal_response = $2::jsonb, error = null, sent_at = $3
+     where id = $1 and state = 'PENDING' returning 1`,
     [id, JSON.stringify(response ?? null), now.toISOString()],
   );
+  return res.rows.length > 0;
 }
 
-export async function markFailed(db: Db, id: number, error: string): Promise<void> {
-  await db.query(`update actions set state = 'FAILED', error = $2 where id = $1`, [id, error]);
+/** Marks a PENDING action FAILED. Returns false when it was no longer PENDING (nothing changed). */
+export async function markFailed(db: Db, id: number, error: string): Promise<boolean> {
+  const res = await db.query(
+    `update actions set state = 'FAILED', error = $2 where id = $1 and state = 'PENDING' returning 1`,
+    [id, error],
+  );
+  return res.rows.length > 0;
 }
 
 export async function getAction(db: Db, id: number): Promise<ActionRow | null> {
