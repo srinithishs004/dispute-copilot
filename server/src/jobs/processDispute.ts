@@ -65,11 +65,11 @@ export function processDispute(deps: ProcessDisputeDeps): JobHandler {
       // Already reviewed or acted on: refresh evidence only, do not redraft.
       if (advanced) return;
       const pending = await tx.query(
-        `select 1 from jobs where type = 'draftLetter' and state in ('queued','running')
+        `select 1 from jobs where type in ('analyzeDispute','draftLetter') and state in ('queued','running')
            and payload->>'disputeId' = $1 limit 1`,
         [detail.dispute_id],
       );
-      if (pending.rows.length === 0) await enqueue(tx, 'draftLetter', { disputeId: detail.dispute_id }, { runAt: new Date(now().getTime() + DRAFT_DELAY_MS) });
+      if (pending.rows.length === 0) await enqueue(tx, 'analyzeDispute', { disputeId: detail.dispute_id }, { runAt: new Date(now().getTime() + DRAFT_DELAY_MS) });
     });
   };
 }

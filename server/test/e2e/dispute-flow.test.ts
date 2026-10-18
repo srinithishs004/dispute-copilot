@@ -23,8 +23,18 @@ it('webhook -> worker -> READY_FOR_REVIEW with evidence and a letter', async () 
   const letter =
     'Dear PayPal dispute team, the order was shipped with tracking number 1Z999AA10123456784 as recorded in our shipment facts. We respectfully ask that the dispute be resolved in our favour. Thank you.';
   const llm: Llm = {
-    async generateJson(_p, schema) {
-      return { data: schema.parse({ letter, citedFactIds: ['shipment.0.tracking'] }), model: 'fake:m' };
+    async generateJson(p, schema) {
+      const data = p.system.includes('recommendation')
+        ? {
+            recommendation: 'FIGHT',
+            confidence: 85,
+            evidence_strength: 'STRONG',
+            reasons: ['Delivered with tracking'],
+            missing_evidence: [],
+            suggested_offer_amount: null,
+          }
+        : { letter, citedFactIds: ['shipment.0.tracking'] };
+      return { data: schema.parse(data), model: 'fake:m' };
     },
   };
   const deps = makeTestDeps({ db, paypal: client });
@@ -47,13 +57,13 @@ it('webhook -> worker -> READY_FOR_REVIEW with evidence and a letter', async () 
   const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   const wd = {
     db,
-    handlers: buildHandlers({ db, paypal: client, llm, now }),
+    handlers: buildHandlers({ db, paypal: client, llm, now, storeName: 'Test Store' }),
     now,
     logger,
   };
   let ran = 0;
   while (await runWorkerOnce(wd)) ran++;
-  expect(ran).toBe(1); // processDispute; draftLetter is delayed
+  expect(ran).toBe(1); // processDispute; analyzeDispute is delayed
   clock = new Date(clock.getTime() + 61_000);
   while (await runWorkerOnce(wd)) ran++;
   expect(ran).toBe(2);
@@ -63,4 +73,5 @@ it('webhook -> worker -> READY_FOR_REVIEW with evidence and a letter', async () 
   expect(detail.body.localState).toBe('READY_FOR_REVIEW');
   expect(detail.body.evidence.missing).toEqual([]);
   expect(detail.body.latestAnalysis.letterDraft).toBe(letter);
+  expect(detail.body.latestAnalysis.recommendation).toBe('FIGHT');
 });

@@ -23,6 +23,7 @@ export type DisputeDetail = DisputeSummary & {
   evidences?: { evidence_type?: string; source?: string; notes?: string; date?: string }[];
   allowed_response_options?: Record<string, unknown>;
   links?: { href?: string; rel?: string; method?: string }[];
+  dispute_outcome?: { outcome_code?: string };
 } & Record<string, unknown>;
 
 export async function listDisputes(
