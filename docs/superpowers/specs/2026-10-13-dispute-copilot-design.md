@@ -228,7 +228,9 @@ Activity → payment → Report a problem → "I haven't received the item or se
 - `make-offer` with `{note, offer_amount, offer_type: REFUND}` succeeded. Status went to `UNDER_REVIEW` and then `WAITING_FOR_BUYER_RESPONSE`; the stage stays `INQUIRY`.
 - After an offer the `make_offer` link disappears and `accept_claim_types` becomes `[REFUND]` only.
 - `adjudicate` is only offered for disputes under review in the claim stage (per PayPal docs). So settle on a fresh inquiry returns 409 until the case is escalated or reaches the claim stage.
-- Results for escalate, provide-evidence and settle: not yet recorded.
+- **provide-evidence (Oct 19, hand-built multipart, `input` part as `application/json`, carrier code `USPS`) succeeded** on an INQUIRY dispute. It moved the case straight to stage `CHARGEBACK`, status `UNDER_REVIEW`, with no seller links left (PayPal is now reviewing).
+- `escalate` after that → 422 `ACTION_NOT_ALLOWED_IN_CURRENT_DISPUTE_STATE` (already past inquiry) — expected.
+- `adjudicate` (settle) on that `UNDER_REVIEW` / `CHARGEBACK` dispute → 400 `ACTION_NOT_ALLOWED_IN_CURRENT_DISPUTE_STATE`, and no `adjudicate` link is listed. Other developers report the same sandbox behaviour with no published fix. **Decision:** settle stays best-effort (the endpoint returns 409 with a hint when PayPal offers no link). For the demo outcome, use paths that resolve without adjudication: the buyer accepts the seller's offer in the sandbox UI, or the seller accepts the claim (full refund); both should arrive as `CUSTOMER.DISPUTE.RESOLVED` and show `outcome`. Re-check the FIGHT case later in case the sandbox adds the link after a delay.
 
 ## 11. Error handling
 
