@@ -159,3 +159,25 @@ describe('draftLetter stance and sign-off', () => {
     );
   });
 });
+
+describe('draftLetter offer amount token and digit sources', () => {
+  const mk = (letter: string): Llm => fakeLlm({ letter, citedFactIds: ['order.id'] });
+  const pad = 'Hello, we are sorry about the trouble with your order DEMO-HIST-02. We would like to offer you a refund of';
+
+  it('does not accept the amount as a substring of a larger number', async () => {
+    const letter = `${pad} 12.50 USD to settle this. Kind regards, Acme Store`;
+    await expect(draftLetter(mk(letter), pack, 'OFFER', [], { ...opts, offerAmount: '2.50' })).rejects.toThrow('offer amount not stated');
+  });
+
+  it('accepts the amount followed by punctuation', async () => {
+    const letter = `${pad} 2.50. Kind regards, Acme Store`;
+    const out = await draftLetter(mk(letter), pack, 'OFFER', [], { ...opts, offerAmount: '2.50' });
+    expect(out.draft.letter).toContain('2.50');
+  });
+
+  it('accepts a long offer amount as a digit-run source', async () => {
+    const letter = `${pad} 100000.00 USD to settle this. Kind regards, Acme Store`;
+    const out = await draftLetter(mk(letter), pack, 'OFFER', [], { ...opts, offerAmount: '100000.00' });
+    expect(out.draft.letter).toContain('100000.00');
+  });
+});

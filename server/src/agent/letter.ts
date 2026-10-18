@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Llm } from '../ai/llm.js';
 import type { EvidencePack } from './evidence.js';
+import { factLine } from './promptText.js';
 
 export type LetterDraft = { letter: string; citedFactIds: string[] };
 
@@ -41,10 +42,6 @@ const STANCE_LINE: Record<Stance, string> = {
   ACCEPT: 'Stance: accept the dispute and say that a full refund is being issued to the buyer.',
 };
 
-const EMAIL_RE = /[^\s@<>()\[\],;:"']+@[^\s@<>()\[\],;:"']+\.[^\s@<>()\[\],;:"']+/g;
-const stripFences = (s: string) => s.replace(/<<<|>>>/g, '');
-const redactEmails = (s: string) => s.replace(EMAIL_RE, '[email]');
-
 /** Extra sources (e.g. dispute and order ids) whose digit runs the letter may repeat. */
 export async function draftLetter(
   llm: Llm,
@@ -60,7 +57,7 @@ export async function draftLetter(
     STANCE_LINE[stance],
     ...(stance === 'OFFER' ? [`Offer amount: ${opts.offerAmount} ${pack.currency}`.trim()] : []),
     'Facts:',
-    ...pack.facts.map((f) => `[${f.id}] ${f.label}: <<<${redactEmails(stripFences(f.value))}>>>`),
+    ...pack.facts.map(factLine),
   ].join('\n');
 
   const { data, model } = await llm.generateJson({ system: systemPrompt(stance, opts.storeName), user }, LetterSchema);
@@ -70,9 +67,17 @@ export async function draftLetter(
   if (data.citedFactIds.some((id) => !ids.has(id))) throw new LetterRejectedError('unknown fact id cited');
   if (data.letter.length < 40 || data.letter.length > 1500) throw new LetterRejectedError('length out of range');
 
-  if (stance === 'OFFER' && !data.letter.includes(opts.offerAmount!)) throw new LetterRejectedError('offer amount not stated');
+  if (stance === 'OFFER') {
+    const amountToken = new RegExp(`(?<![\\d.])${opts.offerAmount!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\d])`);
+    if (!amountToken.test(data.letter)) throw new LetterRejectedError('offer amount not stated');
+  }
 
-  const sources = [...pack.facts.map((f) => f.value), pack.disputeId, ...allowedSources];
+  const sources = [
+    ...pack.facts.map((f) => f.value),
+    pack.disputeId,
+    ...allowedSources,
+    ...(opts.offerAmount ? [opts.offerAmount] : []),
+  ];
   for (const run of data.letter.match(/\d{6,}/g) ?? []) {
     if (!sources.some((s) => s.includes(run))) throw new LetterRejectedError('number not found in facts');
   }
