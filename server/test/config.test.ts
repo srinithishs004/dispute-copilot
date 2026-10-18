@@ -74,3 +74,10 @@ test('runWorkerInline defaults to true only without DATABASE_URL, and can be ove
   expect(loadConfig({ ...base, RUN_WORKER_INLINE: 'false' }).runWorkerInline).toBe(false);
   expect(() => loadConfig({ ...base, RUN_WORKER_INLINE: 'maybe' })).toThrow(/RUN_WORKER_INLINE/);
 });
+
+test('storeName defaults and can be overridden', () => {
+  const base = { PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's' };
+  expect(loadConfig(base).storeName).toBe('Dispute Copilot Demo Store');
+  expect(loadConfig({ ...base, STORE_NAME: '' }).storeName).toBe('Dispute Copilot Demo Store');
+  expect(loadConfig({ ...base, STORE_NAME: 'Acme' }).storeName).toBe('Acme');
+});

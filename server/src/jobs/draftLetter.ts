@@ -36,7 +36,9 @@ export function draftLetterJob(deps: DraftLetterDeps): JobHandler {
       }
 
       const pack = buildEvidencePack(dispute.raw, bundle);
-      const { draft, model } = await draftLetter(llm, pack, 'FIGHT', [disputeId, dispute.order_id]);
+      const { draft, model } = await draftLetter(llm, pack, 'FIGHT', [disputeId, dispute.order_id], {
+        storeName: 'Dispute Copilot Demo Store',
+      });
       await db.transaction(async (tx) => {
         await tx.query(
           `insert into analyses (dispute_id, recommendation, letter_draft, model_used)

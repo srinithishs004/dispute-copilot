@@ -18,6 +18,7 @@ export const testConfig: Config = {
   pgliteDir: '.data/pglite',
   runWorkerInline: true,
   publicBaseUrl: 'http://localhost:3000',
+  storeName: 'Dispute Copilot Demo Store',
   llm: {
     gemini: { apiKey: null, model: 'gemini-3.6-flash' },
     groq: { apiKey: null, model: 'llama-3.3-70b-versatile' },
