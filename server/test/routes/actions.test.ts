@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createApp } from '../../src/app.js';
 import { processDispute } from '../../src/jobs/processDispute.js';
@@ -17,8 +17,14 @@ const H = { 'x-debug-token': 'dbg' };
 const URL_ = `/api/disputes/${inr.dispute_id}/approve`;
 const NOTE = 'Customer received the parcel on time.';
 
+const opened: { close(): Promise<void> }[] = [];
+afterEach(async () => {
+  await Promise.all(opened.splice(0).map((d) => d.close()));
+});
+
 async function setup(opts: { state?: string; fresh?: unknown; paypal?: PayPalClient } = {}) {
   const db = await makeTestDb();
+  opened.push(db);
   await seedStore(db);
   await processDispute({ db, paypal: fakeClient(inr).client, now: () => new Date() })({
     id: 1,
@@ -189,9 +195,44 @@ describe('POST /api/disputes/:id/approve', () => {
     );
   });
 
+  it('409 not ready when the state changes mid-request (claim inside the transaction)', async () => {
+    const { db } = await setup();
+    const paypal: PayPalClient = {
+      request: async <T,>() => {
+        await db.query("update disputes set local_state = 'ACTION_SENT'");
+        return inr as T;
+      },
+    };
+    const app = createApp(makeTestDeps({ db, paypal }));
+    const res = await request(app).post(URL_).set(H).send({ action: 'ACCEPT', note: NOTE });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: 'not ready' });
+    expect(await counts(db)).toEqual({ actions: 0, jobs: 0 });
+    expect((await db.query<{ local_state: string }>('select local_state from disputes')).rows[0]!.local_state).toBe(
+      'ACTION_SENT',
+    );
+  });
+
+  it('400 when the offer is invalid against the fresh PayPal amount', async () => {
+    const fresh = { ...inr, dispute_amount: { currency_code: 'USD', value: '10.00' } };
+    const { app, db } = await setup({ fresh });
+    const res = await request(app).post(URL_).set(H).send({ action: 'OFFER', note: NOTE, offerAmount: '20' });
+    expect(res.status).toBe(400);
+    expect(await counts(db)).toEqual({ actions: 0, jobs: 0 });
+  });
+
+  it('FIGHT skips shipments without a carrier', async () => {
+    const { app, db } = await setup();
+    await db.query('update shipments set carrier = null');
+    expect((await request(app).post(URL_).set(H).send({ action: 'FIGHT', note: NOTE })).status).toBe(202);
+    const p = (await db.query<{ payload: Record<string, unknown> }>('select payload from actions')).rows[0]!.payload;
+    expect('tracking' in p).toBe(false);
+  });
+
   it('concurrent approves: exactly one 202 and one 409, one row, one job', async () => {
     const { app, db } = await setup();
     const send = () => request(app).post(URL_).set(H).send({ action: 'ACCEPT', note: NOTE });
+    // PGlite serializes the requests, so the loser usually sees 'not ready'; the unique-index path is covered by the forced-conflict test above.
     const [a, b] = await Promise.all([send(), send()]);
     expect([a.status, b.status].sort()).toEqual([202, 409]);
     const loser = a.status === 409 ? a : b;

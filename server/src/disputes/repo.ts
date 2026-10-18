@@ -86,3 +86,13 @@ export async function matchOrderId(db: Db, detail: DisputeDetail): Promise<strin
   }
   return null;
 }
+
+/** Atomically moves a dispute to ACTION_PENDING only if it is still READY_FOR_REVIEW or NEEDS_MANUAL. Returns false when another request got there first. */
+export async function claimForAction(tx: Db, disputeId: string): Promise<boolean> {
+  const { rows } = await tx.query(
+    `update disputes set local_state = 'ACTION_PENDING', manual_reason = null, updated_at = now()
+     where paypal_dispute_id = $1 and local_state in ('READY_FOR_REVIEW', 'NEEDS_MANUAL') returning 1`,
+    [disputeId],
+  );
+  return rows.length > 0;
+}

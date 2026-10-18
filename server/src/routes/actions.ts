@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { AppDeps } from '../app.js';
 import { ActionConflictError, createPendingAction, type ActionPayload } from '../actions/repo.js';
-import { upsertDispute, setLocalState } from '../disputes/repo.js';
+import { claimForAction, upsertDispute } from '../disputes/repo.js';
 import { enqueue } from '../jobs/queue.js';
 import { maskId } from '../log.js';
 import { allowedActions, getDispute, type DisputeAction } from '../paypal/disputes.js';
@@ -29,6 +29,10 @@ type DisputeRow = {
   amount: string | null;
   currency: string | null;
 };
+
+class NotReadyError extends Error {
+  override name = 'NotReadyError';
+}
 
 export function actionRoutes(deps: AppDeps): Router {
   const { db, config, paypal } = deps;
@@ -64,21 +68,6 @@ export function actionRoutes(deps: AppDeps): Router {
       res.status(400).json({ error: `note must be ${NOTE_MIN}-${NOTE_MAX} characters` });
       return;
     }
-    let offerAmount: string | undefined;
-    if (action === 'OFFER') {
-      const raw = body.offerAmount;
-      if (typeof raw !== 'string' || !AMOUNT_RE.test(raw)) {
-        res.status(400).json({ error: 'offerAmount must be a decimal string with up to 2 decimals' });
-        return;
-      }
-      const cents = toCents(raw);
-      if (row.amount == null || cents <= 0 || cents >= toCents(String(row.amount))) {
-        res.status(400).json({ error: 'offerAmount must be greater than 0 and less than the disputed amount' });
-        return;
-      }
-      offerAmount = fromCents(cents);
-    }
-
     let fresh;
     try {
       fresh = await getDispute(paypal, id);
@@ -96,26 +85,46 @@ export function actionRoutes(deps: AppDeps): Router {
       return;
     }
 
+    let offerAmount: string | undefined;
+    if (action === 'OFFER') {
+      const raw = body.offerAmount;
+      if (typeof raw !== 'string' || !AMOUNT_RE.test(raw)) {
+        res.status(400).json({ error: 'offerAmount must be a decimal string with up to 2 decimals' });
+        return;
+      }
+      const cents = toCents(raw);
+      const disputed = fresh.dispute_amount?.value ?? row.amount;
+      if (disputed == null || cents <= 0 || cents >= toCents(String(disputed))) {
+        res.status(400).json({ error: 'offerAmount must be greater than 0 and less than the disputed amount' });
+        return;
+      }
+      offerAmount = fromCents(cents);
+    }
+
     const payload: ActionPayload = { note, currency: row.currency ?? fresh.dispute_amount?.currency_code ?? 'USD' };
     if (offerAmount !== undefined) payload.offerAmount = offerAmount;
     if (action === 'FIGHT' && row.order_id) {
       const bundle = await findOrderBundle(db, row.order_id);
       const tracking = (bundle?.shipments ?? []).flatMap((s) =>
-        s.trackingNumber ? [{ carrier: s.carrier ?? '', number: s.trackingNumber }] : [],
+        s.trackingNumber && s.carrier ? [{ carrier: s.carrier, number: s.trackingNumber }] : [],
       );
       if (tracking.length > 0) payload.tracking = tracking;
     }
 
     try {
       const actionId = await db.transaction(async (tx) => {
+        if (!(await claimForAction(tx, id))) throw new NotReadyError();
         const aid = await createPendingAction(tx, id, action, payload, new Date());
-        await setLocalState(tx, id, 'ACTION_PENDING');
         await enqueue(tx, 'executeAction', { actionId: aid });
         return aid;
       });
       logger.info(`approve: ${action} queued for dispute ${maskId(id)} action=${actionId}`);
       res.status(202).json({ actionId, state: 'PENDING' });
     } catch (err) {
+      if (err instanceof NotReadyError) {
+        res.status(409).json({ error: 'not ready' });
+        return;
+      }
       if (err instanceof ActionConflictError) {
         res.status(409).json({ error: 'action already pending' });
         return;
