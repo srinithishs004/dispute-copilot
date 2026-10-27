@@ -21,7 +21,8 @@ export const testConfig: Config = {
   storeName: 'Dispute Copilot Demo Store',
   llm: {
     gemini: { apiKey: null, model: 'gemini-3.6-flash' },
-    groq: { apiKey: null, model: 'llama-3.3-70b-versatile' },
+    groq: { apiKey: null, model: 'openai/gpt-oss-120b' },
+    timeoutMs: 45_000,
   },
 };
 

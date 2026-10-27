@@ -62,7 +62,7 @@ function parseOutput<T>(text: unknown, schema: z.ZodType<T>): T {
 
 export function createLlm(opts: LlmOptions): Llm {
   const fetchImpl = opts.fetchImpl ?? fetch;
-  const timeoutMs = opts.timeoutMs ?? 20_000;
+  const timeoutMs = opts.timeoutMs ?? 45_000;
 
   async function post(url: string, headers: Record<string, string>, body: unknown): Promise<any> {
     let res: Response;

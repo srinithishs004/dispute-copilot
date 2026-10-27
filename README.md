@@ -44,7 +44,8 @@ Set these in `.env` at the repo root (a blank value counts as not set). Never co
 | `GEMINI_API_KEY` | none | Gemini key. Tried first. |
 | `GEMINI_MODEL` | `gemini-3.6-flash` | Gemini model name. |
 | `GROQ_API_KEY` | none | Groq key. Used if Gemini fails or has no key. |
-| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model name. |
+| `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model name. |
+| `LLM_TIMEOUT_MS` | `45000` | Time limit for each AI call (5000–90000). |
 | `STORE_NAME` | `Dispute Copilot Demo Store` | Store name the AI letter signs off with (the seller name used in the letter). |
 
 You need at least one of `GEMINI_API_KEY` or `GROQ_API_KEY` to get a letter. A provider without a key is skipped.
