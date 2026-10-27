@@ -20,6 +20,8 @@ export interface Config {
   llm: {
     gemini: { apiKey: string | null; model: string };
     groq: { apiKey: string | null; model: string };
+    /** Per-call timeout. 2 calls x 3 provider attempts must stay under the 5 min job lease. */
+    timeoutMs: number;
   };
 }
 
@@ -53,7 +55,9 @@ const EnvSchema = z.object({
   GEMINI_API_KEY: optional,
   GEMINI_MODEL: z.preprocess(blankToUndefined, z.string().default('gemini-3.6-flash')),
   GROQ_API_KEY: optional,
-  GROQ_MODEL: z.preprocess(blankToUndefined, z.string().default('llama-3.3-70b-versatile')),
+  // llama-3.3-70b-versatile was shut down by Groq on Aug 16, 2026.
+  GROQ_MODEL: z.preprocess(blankToUndefined, z.string().default('openai/gpt-oss-120b')),
+  LLM_TIMEOUT_MS: z.preprocess(blankToUndefined, z.coerce.number().int().min(5_000).max(90_000).default(45_000)),
 });
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -82,6 +86,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     llm: {
       gemini: { apiKey: e.GEMINI_API_KEY ?? null, model: e.GEMINI_MODEL },
       groq: { apiKey: e.GROQ_API_KEY ?? null, model: e.GROQ_MODEL },
+      timeoutMs: e.LLM_TIMEOUT_MS,
     },
   };
 }

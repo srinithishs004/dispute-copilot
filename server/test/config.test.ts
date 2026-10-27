@@ -60,10 +60,18 @@ test('PUBLIC_BASE_URL defaults to localhost and drops a trailing slash', () => {
 test('LLM settings default to no keys and the default models', () => {
   const c = loadConfig({ PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's', GEMINI_API_KEY: '', GROQ_MODEL: '' });
   expect(c.llm.gemini).toEqual({ apiKey: null, model: 'gemini-3.6-flash' });
-  expect(c.llm.groq).toEqual({ apiKey: null, model: 'llama-3.3-70b-versatile' });
+  expect(c.llm.groq).toEqual({ apiKey: null, model: 'openai/gpt-oss-120b' });
+  expect(c.llm.timeoutMs).toBe(45_000);
   const d = loadConfig({ PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's', GEMINI_API_KEY: 'g', GROQ_API_KEY: 'q', GEMINI_MODEL: 'm1' });
   expect(d.llm.gemini).toEqual({ apiKey: 'g', model: 'm1' });
   expect(d.llm.groq.apiKey).toBe('q');
+});
+
+test('LLM_TIMEOUT_MS overrides the timeout and must be 5000-90000', () => {
+  const base = { PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's' };
+  expect(loadConfig({ ...base, LLM_TIMEOUT_MS: '30000' }).llm.timeoutMs).toBe(30_000);
+  expect(() => loadConfig({ ...base, LLM_TIMEOUT_MS: '1000' })).toThrow(/LLM_TIMEOUT_MS/);
+  expect(() => loadConfig({ ...base, LLM_TIMEOUT_MS: 'abc' })).toThrow(/LLM_TIMEOUT_MS/);
 });
 
 test('runWorkerInline defaults to true only without DATABASE_URL, and can be overridden', () => {
