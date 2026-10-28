@@ -76,3 +76,45 @@ export type DisputeDetail = {
 
 export type ApproveBody = { action: DisputeAction; note: string; offerAmount?: string };
 export type ApproveResponse = { actionId: number; state: 'PENDING' };
+
+/** One row of `sources.disputes` from GET /api/dashboard/data (server/src/routes/dashboard.ts). */
+export type DashboardDispute = {
+  disputeId: string;
+  reason: string | null;
+  status: string | null;
+  localState: LocalState | string;
+  originalAmount: number;
+  /** Amount PayPal still reports once resolved; null while open. */
+  finalAmount: number | null;
+  /** What the seller kept on a resolved dispute; null while open. */
+  amountKept: number | null;
+  currency: string | null;
+  responseDueAt: string | null;
+  /** Whole days to the deadline; null when resolved or there is no deadline. */
+  daysLeft: number | null;
+  deadlineFlag: DeadlineFlag | string;
+  recommendation: DisputeAction | string | null;
+  confidence: number | null;
+  evidenceStrength: string | null;
+  outcome: string | null;
+  createdAt: string | null;
+};
+
+export type DashboardAction = {
+  disputeId: string;
+  type: DisputeAction | string;
+  state: string;
+  createdAt: string | null;
+  sentAt: string | null;
+};
+
+export type DashboardEvidenceGap = { disputeId: string; requirement: string };
+
+export type DashboardFeed = {
+  generatedAt: string;
+  sources: {
+    disputes: DashboardDispute[];
+    actions: DashboardAction[];
+    evidence_gaps: DashboardEvidenceGap[];
+  };
+};

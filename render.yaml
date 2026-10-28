@@ -58,6 +58,9 @@ services:
         sync: false
       - key: VITE_SANDBOX_BUYER_PASSWORD
         sync: false
+      # AG Studio licence key: a public client key baked into the web build. Unset shows the trial watermark.
+      - key: VITE_AG_STUDIO_LICENSE_KEY
+        sync: false
 
 databases:
   - name: dispute-copilot-db

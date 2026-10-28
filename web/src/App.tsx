@@ -9,7 +9,7 @@ import { Guide } from './pages/Guide';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { NotFound } from './pages/NotFound';
-import { DashboardPlaceholder } from './pages/Placeholders';
+import { Dashboard } from './pages/Dashboard';
 import { Privacy } from './pages/Privacy';
 import { Review } from './pages/Review';
 import { Terms } from './pages/Terms';
@@ -48,7 +48,7 @@ export function App() {
                   path="dashboard"
                   element={
                     <RequireAuth>
-                      <DashboardPlaceholder />
+                      <Dashboard />
                     </RequireAuth>
                   }
                 />
