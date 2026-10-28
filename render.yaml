@@ -1,4 +1,5 @@
-# Phase 1: one web service (webhooks, store, API and the job worker running inline)
+# One web service: webhooks, demo store, seller API, the built web app (dashboard and Review
+# page) and the job worker running inline.
 # plus a small paid Postgres so data survives the free web service sleeping.
 # Postgres is paid from Render credits (Basic-256mb, 1 GB).
 services:
@@ -23,6 +24,8 @@ services:
       # With DATABASE_URL set the worker defaults to off; there is no separate worker yet.
       - key: RUN_WORKER_INLINE
         value: "true"
+      # Must be this site's URL (no trailing slash). Used for the PayPal return URLs and the
+      # Origin check on approve.
       - key: PUBLIC_BASE_URL
         sync: false
       - key: PAYPAL_CLIENT_ID

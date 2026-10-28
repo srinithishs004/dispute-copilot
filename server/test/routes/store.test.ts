@@ -14,6 +14,8 @@ function paypalReplies(call: RecordedCall): unknown {
   return { status: 'COMPLETED', purchase_units: [{ payments: { captures: [{ id: 'CAP-1' }] } }] };
 }
 
+const squash = (s: string) => s.replace(/\s+/g, ' ');
+
 let db: Db;
 let fake: ReturnType<typeof fakeClient>;
 let app: ReturnType<typeof createApp>;
@@ -61,13 +63,21 @@ describe('GET /store', () => {
 
   test('the buy button keeps a visible focus ring', async () => {
     const res = await request(app).get('/store');
-    expect(res.text).toMatch(/\.btn:focus-visible \{ box-shadow: var\(--focus\)/);
+    expect(squash(res.text)).toMatch(/\.btn:focus-visible ?\{ ?box-shadow: ?var\(--focus\)/);
+  });
+
+  test('each product has a checkout form with a hidden productId', async () => {
+    const res = await request(app).get('/store');
+    expect(res.text.match(/action="\/store\/checkout"/g)).toHaveLength(3);
+    for (const id of ['mug', 'tee', 'lamp']) {
+      expect(res.text).toMatch(new RegExp(`<input type="hidden" name="productId" value="${id}">`));
+    }
   });
 
   test('prices render in a mono, tabular element', async () => {
     const res = await request(app).get('/store');
     expect(res.text).toContain('<p class="price">$25.00</p>');
-    expect(res.text).toMatch(/\.price \{[^}]*font-variant-numeric: tabular-nums/);
+    expect(squash(res.text)).toMatch(/\.price ?\{[^}]*font-variant-numeric: ?tabular-nums/);
   });
 });
 

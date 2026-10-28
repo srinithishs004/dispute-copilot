@@ -50,7 +50,7 @@ Success: the sandbox shows a dispute or case for the payment.
 
 Open the app (http://localhost:3000 locally, https://dispute-copilot-zv53.onrender.com deployed) and choose **Sign in**. Use the judge or owner account from your `.env`. The judge can read and approve; only the owner can run the sync, the sandbox settle and the debug events.
 
-On the free Render plan the first request can take about 30 seconds while the service wakes. The app shows a waking up screen and retries.
+On the free Render plan the first request can take up to a minute while the service wakes. The app shows a waking up screen and retries.
 
 Success: you land on the dashboard, signed in.
 
@@ -209,4 +209,4 @@ Success: the list contains a `CUSTOMER.DISPUTE.CREATED` event for your dispute I
 curl -H "x-debug-token: <your DEBUG_TOKEN>" https://<service>.onrender.com/debug/events
 ```
 
-Note: free Render services sleep when idle. The first request after a while can take about 30 seconds, and PayPal may retry the webhook in the meantime.
+Note: free Render services sleep when idle. The first request after a while can take up to a minute, and PayPal may retry the webhook in the meantime.

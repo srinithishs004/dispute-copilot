@@ -50,7 +50,7 @@ One Render web service serves the API, the store and the built web app, so there
 
 ## Environment variables
 
-Set these in `.env` at the repo root (a blank value counts as not set) or in the Render dashboard. Never commit `.env`. `.env.example` lists every key with empty values.
+Set these in `.env` at the repo root (a blank value counts as not set) or in the Render dashboard. Never commit `.env`. `.env.example` lists the keys you are most likely to set; a blank value means default or off.
 
 | Variable | What it is for |
 |---|---|
@@ -88,7 +88,13 @@ Needs Node 22.
    npm run build
    npm start
    ```
-   Open http://localhost:3000. `npm start` needs the build first; with no `DATABASE_URL` it uses PGlite and runs the worker inline.
+   Open http://localhost:3000. With no `DATABASE_URL` it uses PGlite and runs the worker inline.
+
+   `npm start` does not read `.env`: only `npm run dev` loads it. To run the built server with your `.env`, from the repo root:
+   ```
+   node --env-file=.env server/dist/index.js
+   ```
+   or export the variables in your shell first and then run `npm start`. Note the split: `npm run build` reads the `VITE_*` keys from the root `.env` (Vite's `envDir` points there), but the built server reads only the process environment. Run the build with the `VITE_*` values in `.env` (or exported), and give the server its own values as above.
 4. Dev mode, two terminals:
    ```
    npm run dev            # API, store and worker on :3000 (restarts on change)
@@ -119,7 +125,7 @@ Server tests use supertest and PGlite with PayPal and AI calls mocked. Web tests
 ## Known limitations
 
 - **The sandbox refuses the seller settle step.** The owner-only `POST /api/disputes/<id>/sandbox/settle` could not settle a dispute in our runs. The demo resolves by the buyer accepting the offer in the PayPal sandbox instead.
-- **Cold start.** On Render's free plan the service sleeps when idle, and the first request can take about 30 seconds. The app shows a waking up screen meanwhile.
+- **Cold start.** On Render's free plan the service sleeps when idle, and the first request can take up to a minute. The app shows a waking up screen meanwhile.
 - **AG Studio licence watermark.** Without `VITE_AG_STUDIO_LICENSE_KEY` the dashboard shows AG Studio's trial watermark on any host other than localhost.
 - **The Dispute Analyst needs a wide screen.** On phones the dashboard shows the widgets and a note, but not the chat panel.
 
