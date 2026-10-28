@@ -9,8 +9,9 @@ import { Guide } from './pages/Guide';
 import { Home } from './pages/Home';
 import { Login } from './pages/Login';
 import { NotFound } from './pages/NotFound';
-import { DashboardPlaceholder, ReviewPlaceholder } from './pages/Placeholders';
+import { DashboardPlaceholder } from './pages/Placeholders';
 import { Privacy } from './pages/Privacy';
+import { Review } from './pages/Review';
 import { Terms } from './pages/Terms';
 
 function Layout() {
@@ -55,7 +56,7 @@ export function App() {
                   path="disputes/:id"
                   element={
                     <RequireAuth>
-                      <ReviewPlaceholder />
+                      <Review />
                     </RequireAuth>
                   }
                 />
