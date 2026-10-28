@@ -47,7 +47,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="toast-region" role="status" aria-live="polite" aria-atomic="false">
         {items.map((t) => (
-          <div key={t.id} className={`k-toast toast toast--${t.tone}`}>
+          <div key={t.id} className={`k-toast toast toast--${t.tone}`} role={t.tone === 'danger' ? 'alert' : undefined}>
             <span className="k-toast__dot" aria-hidden="true" />
             <div className="toast__text">
               <div className="k-toast__title">{t.title}</div>

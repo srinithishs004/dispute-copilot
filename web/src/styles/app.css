@@ -10,7 +10,7 @@ a:hover { text-decoration-thickness: 2px; }
 code { font-family: var(--font-mono); }
 .muted { color: var(--ink-2); }
 .eyebrow { color: var(--ink-3); }
-:where(a, button, input, [tabindex]):focus-visible { outline: none; box-shadow: var(--focus); }
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible { outline: none; box-shadow: var(--focus); }
 
 /* Buttons rendered as links */
 a.k-btn { text-decoration: none; justify-content: center; }
