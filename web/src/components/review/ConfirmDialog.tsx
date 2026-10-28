@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, type KeyboardEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { actionLabel, firstLines } from '../../lib/format';
 import type { DisputeAction } from '../../lib/types';
@@ -12,28 +12,36 @@ type Props = {
   sending: boolean;
   onCancel(): void;
   onConfirm(): void;
+  /** Where focus goes when the dialog closes (the Approve button). */
+  returnFocusRef: RefObject<HTMLElement>;
 };
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /** Restates exactly what goes to PayPal. Traps focus, closes on Escape, returns focus to the opener. */
-export function ConfirmDialog({ action, amountLabel, amount, note, sending, onCancel, onConfirm }: Props) {
+export function ConfirmDialog({ action, amountLabel, amount, note, sending, onCancel, onConfirm, returnFocusRef }: Props) {
   const titleId = useId();
   const descId = useId();
   const box = useRef<HTMLDivElement>(null);
   const keep = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     keep.current?.focus();
     return () => {
       document.body.style.overflow = overflow;
-      if (opener && opener.isConnected) opener.focus();
+      const back = returnFocusRef.current;
+      if (back && back.isConnected) back.focus();
       else document.getElementById('main')?.focus();
     };
-  }, []);
+  }, [returnFocusRef]);
+
+  // Both buttons are disabled while sending; hold focus on the dialog itself so it cannot fall to the page.
+  useEffect(() => {
+    if (sending) box.current?.focus();
+    else if (box.current && document.activeElement === box.current) keep.current?.focus();
+  }, [sending]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Escape') {
@@ -43,7 +51,11 @@ export function ConfirmDialog({ action, amountLabel, amount, note, sending, onCa
     }
     if (e.key !== 'Tab' || !box.current) return;
     const items = Array.from(box.current.querySelectorAll<HTMLElement>(FOCUSABLE));
-    if (items.length === 0) return;
+    if (items.length === 0) {
+      e.preventDefault();
+      box.current.focus();
+      return;
+    }
     const first = items[0]!;
     const last = items[items.length - 1]!;
     const active = document.activeElement;
@@ -72,6 +84,8 @@ export function ConfirmDialog({ action, amountLabel, amount, note, sending, onCa
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
+        aria-busy={sending || undefined}
+        tabIndex={-1}
         onKeyDown={onKeyDown}
       >
         <h2 id={titleId}>Send this to PayPal?</h2>

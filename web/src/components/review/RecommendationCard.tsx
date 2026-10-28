@@ -111,7 +111,7 @@ export function RecommendationCard({ analysis, localState, amount, currency }: P
 
           {analysis.createdAt || analysis.modelUsed ? (
             <p className="rec__meta">
-              {analysis.createdAt ? `Analysed ${shortDate(analysis.createdAt)}` : null}
+              {analysis.createdAt ? `Analyzed ${shortDate(analysis.createdAt)}` : null}
               {analysis.createdAt && analysis.modelUsed ? ' · ' : null}
               {analysis.modelUsed ?? null}
             </p>

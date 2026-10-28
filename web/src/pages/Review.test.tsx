@@ -59,6 +59,7 @@ async function openConfirm() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   setVisibility('visible');
 });
 
@@ -182,6 +183,120 @@ describe('Review page', () => {
     expect(await screen.findByText(message)).toBeTruthy();
     expect(screen.queryByText(body.error)).toBeNull();
     await waitFor(() => expect(detailCalls(fn)).toBeGreaterThan(before));
+  });
+
+  it.each([
+    [{ error: 'action already pending' }, 'An action is already pending'],
+    [{ error: 'not ready' }, 'This dispute changed, reloading'],
+  ])('409 %o message clears once the reload shows a new state', async (body, message) => {
+    serve([readyDetail(), readyDetail({ localState: 'ACTION_PENDING' })], () => json(409, body));
+    renderReview();
+    const dialog = await openConfirm();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send to PayPal' }));
+    await screen.findByText('Sending to PayPal');
+    expect(screen.queryByText(message)).toBeNull();
+  });
+
+  it('an unknown 409 gets the safe message', async () => {
+    serve([readyDetail()], () => json(409, { error: 'something new from the server' }));
+    renderReview();
+    const dialog = await openConfirm();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send to PayPal' }));
+    expect(await screen.findByText('This dispute changed, reloading')).toBeTruthy();
+    expect(screen.queryByText(/something new/)).toBeNull();
+  });
+
+  it.each([
+    [19, false],
+    [20, true],
+    [2000, true],
+    [2001, false],
+  ])('a letter of %i characters opens the dialog: %s', async (len, opens) => {
+    serve([readyDetail()]);
+    renderReview();
+    fireEvent.change(await screen.findByLabelText('Letter'), { target: { value: 'x'.repeat(len) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    if (opens) expect(await screen.findByRole('dialog')).toBeTruthy();
+    else {
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.getByText('Write between 20 and 2000 characters.')).toBeTruthy();
+    }
+  });
+
+  it.each(['0', '25', '25.00', '12.345'])('offer %s is rejected before the dialog', async (value) => {
+    serve([readyDetail()]);
+    renderReview();
+    fireEvent.change(await screen.findByLabelText('Offer amount'), { target: { value } });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText('Enter an amount above $0.00 and below $25.00.')).toBeTruthy();
+  });
+
+  it('offer $12.5 is accepted and sent as 12.50', async () => {
+    const fn = serve([readyDetail()], () => json(202, { actionId: 10, state: 'PENDING' }));
+    renderReview();
+    fireEvent.change(await screen.findByLabelText('Offer amount'), { target: { value: '$12.5' } });
+    const dialog = await openConfirm();
+    expect(within(dialog).getByText('$12.50')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send to PayPal' }));
+    await screen.findByText('Sent to PayPal queue');
+    expect(JSON.parse(String(approveCalls(fn)[0]![1]!.body)).offerAmount).toBe('12.50');
+  });
+
+  it('the FIGHT dialog shows the disputed amount', async () => {
+    serve([readyDetail()]);
+    renderReview();
+    const picker = await screen.findByRole('group', { name: 'Action' });
+    fireEvent.click(within(picker).getByRole('button', { name: /Fight/ }));
+    const dialog = await openConfirm();
+    expect(within(dialog).getByText('Disputed')).toBeTruthy();
+    expect(within(dialog).getByText('$25.00')).toBeTruthy();
+  });
+
+  it('focus stays inside the dialog while sending', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    serve([readyDetail()], async () => {
+      await gate;
+      return json(202, { actionId: 11, state: 'PENDING' });
+    });
+    renderReview();
+    const dialog = await openConfirm();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send to PayPal' }));
+    await waitFor(() => expect(document.activeElement).toBe(dialog));
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await act(async () => release());
+    await screen.findByText('Sent to PayPal queue');
+  });
+
+  it('closing the dialog returns focus to Approve even if focus was elsewhere at open', async () => {
+    serve([readyDetail()]);
+    renderReview();
+    const approve = await screen.findByRole('button', { name: 'Approve' });
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.click(approve);
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(approve);
+  });
+
+  it('a rejected action is told once: the alert, not the banner too', async () => {
+    serve([
+      readyDetail({
+        localState: 'NEEDS_MANUAL',
+        manualReason: 'PayPal rejected the action (UNPROCESSABLE_ENTITY)',
+        actions: [
+          { id: 2, type: 'FIGHT', state: 'FAILED', error: 'UNPROCESSABLE_ENTITY: x', createdAt: '2026-10-28T09:00:00.000Z', sentAt: null },
+        ],
+      }),
+    ]);
+    renderReview();
+    expect(await screen.findByText('Your last action did not go through')).toBeTruthy();
+    expect(screen.queryByText('PayPal rejected the last action. Check the case in PayPal before approving again.')).toBeNull();
   });
 
   it('400 on the note shows a field error without the server text', async () => {
@@ -347,6 +462,29 @@ describe('Review polling', () => {
     await screen.findByText('Sent to PayPal');
     await act(() => vi.advanceTimersByTimeAsync(30_000));
     expect(detailCalls(fn)).toBe(3);
+  });
+
+  it('a tab return during polling does not double up with the timer', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let release: (() => void) | null = null;
+    let calls = 0;
+    mockFetch(async (url) => {
+      if (url !== DETAIL_URL) return json(404, {});
+      calls += 1;
+      if (calls === 2) await new Promise<void>((r) => (release = r));
+      return json(200, readyDetail({ localState: 'ANALYZING', latestAnalysis: null }));
+    });
+    renderReview();
+    await screen.findByText('The AI is reading the evidence');
+    act(() => setVisibility('hidden'));
+    act(() => setVisibility('visible'));
+    await waitFor(() => expect(calls).toBe(2));
+    // The tab-return load is still in flight: the 5 s timer must not fire another one.
+    await act(() => vi.advanceTimersByTimeAsync(12_000));
+    expect(calls).toBe(2);
+    await act(async () => release!());
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(calls).toBe(3);
   });
 
   it('pauses while the tab is hidden and resumes when visible', async () => {

@@ -86,10 +86,10 @@ export const ACTION_SHORT: Record<DisputeAction, string> = {
 };
 
 const OUTCOMES: Record<string, string> = {
-  RESOLVED_SELLER_FAVOUR: 'Resolved in your favour',
+  RESOLVED_SELLER_FAVOUR: 'Resolved in your favor',
   RESOLVED_BUYER_FAVOUR: 'Resolved in the buyer’s favour',
   RESOLVED_WITH_PAYOUT: 'Resolved with a PayPal payout',
-  CANCELED_BY_BUYER: 'Cancelled by the buyer',
+  CANCELED_BY_BUYER: 'Canceled by the buyer',
   ACCEPTED: 'Claim accepted',
   DENIED: 'Claim denied',
 };

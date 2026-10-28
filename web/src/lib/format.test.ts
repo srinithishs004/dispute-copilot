@@ -39,8 +39,9 @@ describe('format', () => {
     expect(actionLabel('OFFER')).toBe('Offer a partial refund');
     expect(actionLabel('FIGHT')).toBe('Fight');
     expect(actionLabel('ACCEPT')).toBe('Accept');
-    expect(outcomeLabel('RESOLVED_SELLER_FAVOUR')).toBe('Resolved in your favour');
+    expect(outcomeLabel('RESOLVED_SELLER_FAVOUR')).toBe('Resolved in your favor');
     expect(outcomeLabel('RESOLVED_BUYER_FAVOUR')).toBe('Resolved in the buyer’s favour');
+    expect(outcomeLabel('CANCELED_BY_BUYER')).toBe('Canceled by the buyer');
     expect(outcomeLabel(null)).toBe('Resolved');
   });
 

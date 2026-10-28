@@ -29,6 +29,7 @@ const POLL_MS = 5000;
 const POLL_STATES = new Set(['NEW', 'ANALYZING', 'ACTION_PENDING']);
 const ORDER: DisputeAction[] = ['FIGHT', 'OFFER', 'ACCEPT'];
 const AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
+const REJECTED_PREFIX = 'PayPal rejected the action';
 const NOTE_ERROR = `Write between ${NOTE_MIN} and ${NOTE_MAX} characters.`;
 
 function allowedList(d: DisputeDetail): DisputeAction[] {
@@ -79,7 +80,8 @@ export function Review() {
   const [action, setAction] = useState<DisputeAction | null>(null);
   const [offer, setOffer] = useState('');
   const [note, setNote] = useState('');
-  const [dirty, setDirty] = useState(false);
+  // A ref, not state: only the fill effect reads it, and it must not re-run that effect.
+  const dirty = useRef(false);
   const [stale, setStale] = useState(false);
   const baseKey = useRef<string | null | undefined>(undefined);
 
@@ -99,6 +101,7 @@ export function Review() {
 
   const alive = useRef(true);
   const seq = useRef(0);
+  const loading = useRef(0);
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -108,6 +111,7 @@ export function Review() {
 
   const load = useCallback(async () => {
     const mine = ++seq.current;
+    loading.current += 1;
     try {
       const d = await api<DisputeDetail>(`/api/disputes/${encodeURIComponent(id)}`);
       if (!alive.current || mine !== seq.current) return;
@@ -122,16 +126,22 @@ export function Review() {
       if (err instanceof ApiError && err.status === 404) setLoadError('notfound');
       else setLoadError((prev) => prev ?? 'error');
     } finally {
-      if (alive.current && mine === seq.current) setTick((t) => t + 1);
+      loading.current -= 1;
+      // Always tick, so polling re-arms even when a newer load already settled.
+      if (alive.current) setTick((t) => t + 1);
     }
   }, [id, navigate, location.pathname, location.search]);
+
+  // Latest `load` for effects that must run only when the id changes.
+  const loadRef = useRef(load);
+  loadRef.current = load;
 
   // First load, and again if the id changes.
   useEffect(() => {
     setData(null);
     setLoadError(null);
     baseKey.current = undefined;
-    void load();
+    void loadRef.current();
   }, [id]);
 
   // Pause while the tab is hidden; catch up as soon as it is visible again.
@@ -148,10 +158,17 @@ export function Review() {
   // Poll every 5 s while the AI is working or an action is on its way to PayPal.
   const polling = !!data && POLL_STATES.has(data.localState);
   useEffect(() => {
-    if (!polling || !visible) return;
+    // Never stack a timer on a load that is still in flight (for example the tab-return fetch).
+    if (!polling || !visible || loading.current > 0) return;
     const t = setTimeout(() => void load(), POLL_MS);
     return () => clearTimeout(t);
   }, [polling, visible, tick, load]);
+
+  // A message about the last approve attempt is stale once the dispute moves on.
+  const localState = data?.localState;
+  useEffect(() => {
+    setSubmitError(null);
+  }, [localState]);
 
   // Fill the editor from the analysis, but never overwrite the seller's edits.
   useEffect(() => {
@@ -163,7 +180,7 @@ export function Review() {
       setNote(analysis?.letterDraft ?? '');
       setOffer(analysis?.suggestedOffer ?? '');
       setAction(preferredAction(data));
-      setDirty(false);
+      dirty.current = false;
       setStale(false);
       baseKey.current = key;
     };
@@ -172,7 +189,7 @@ export function Review() {
       return;
     }
     if (key !== baseKey.current) {
-      if (dirty) setStale(true);
+      if (dirty.current) setStale(true);
       else fill();
       return;
     }
@@ -186,7 +203,7 @@ export function Review() {
     setNote(a?.letterDraft ?? '');
     setOffer(a?.suggestedOffer ?? '');
     setAction(preferredAction(data));
-    setDirty(false);
+    dirty.current = false;
     setStale(false);
     setErrors({});
     baseKey.current = a?.createdAt ?? null;
@@ -231,7 +248,7 @@ export function Review() {
       await api<ApproveResponse>(`/api/disputes/${encodeURIComponent(id)}/approve`, { method: 'POST', json: ok.body });
       if (!alive.current) return;
       setConfirmOpen(false);
-      setDirty(false);
+      dirty.current = false;
       toast.show({ title: 'Sent to PayPal queue', body: 'This page updates when PayPal confirms.', tone: 'success' });
       void load();
     } catch (err) {
@@ -346,7 +363,7 @@ export function Review() {
       ? { label: 'Offer', value: money(normaliseOffer(offer, data) ?? offer, data.currency) }
       : action === 'ACCEPT'
         ? { label: 'Full refund', value: money(data.amount, data.currency) }
-        : null;
+        : { label: 'Disputed', value: money(data.amount, data.currency) };
 
   return (
     <div className="page page--wide review">
@@ -400,7 +417,10 @@ export function Review() {
         </dl>
       </header>
 
-      {state === 'NEEDS_MANUAL' ? <ManualBanner reason={data.manualReason} /> : null}
+      {/* The failed-action alert below already says PayPal rejected it; do not say it twice. */}
+      {state === 'NEEDS_MANUAL' && !(lastFailed && data.manualReason?.startsWith(REJECTED_PREFIX)) ? (
+        <ManualBanner reason={data.manualReason} />
+      ) : null}
 
       <div className="review-grid">
         <div className="review-col">
@@ -451,13 +471,13 @@ export function Review() {
               offer={offer}
               onOffer={(v) => {
                 setOffer(v);
-                setDirty(true);
+                dirty.current = true;
                 if (errors.offer) setErrors((e) => ({ ...e, offer: undefined }));
               }}
               note={note}
               onNote={(v) => {
                 setNote(v);
-                setDirty(true);
+                dirty.current = true;
                 if (errors.note) setErrors((e) => ({ ...e, note: undefined }));
               }}
               currency={data.currency}
@@ -496,6 +516,7 @@ export function Review() {
           sending={sending}
           onCancel={() => setConfirmOpen(false)}
           onConfirm={() => void onConfirm()}
+          returnFocusRef={approveRef}
         />
       ) : null}
     </div>

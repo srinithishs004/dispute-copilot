@@ -345,6 +345,7 @@ a.k-btn { text-decoration: none; justify-content: center; }
 .confirm-scrim { position: fixed; inset: 0; z-index: var(--z-overlay); overflow-y: auto; animation: confirm-fade var(--dur) var(--ease); }
 .confirm { max-width: 480px; animation: confirm-in var(--dur-slow) var(--ease); }
 .confirm h2 { color: var(--ink); }
+.confirm:focus, .confirm:focus-visible { outline: none; box-shadow: var(--modal), var(--edge); }
 .confirm__list { margin: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
 .confirm__row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
 .confirm__row dt { font: 500 11px/20px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
