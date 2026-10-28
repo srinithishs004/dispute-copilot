@@ -194,10 +194,10 @@ export function thankYouPage(orderId: string): string {
 
 export function cancelPage(): string {
   return layout(
-    'Payment cancelled',
+    'Payment canceled',
     `<div class="panel">
-<h1>Payment cancelled</h1>
-<p>Payment cancelled. Nothing was charged.</p>
+<h1>Payment canceled</h1>
+<p>Payment canceled. Nothing was charged.</p>
 <p><a href="/store">Back to the store</a></p>
 </div>`,
   );

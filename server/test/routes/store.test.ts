@@ -178,7 +178,7 @@ describe('GET /store/cancel', () => {
   test('shows a friendly cancelled page', async () => {
     const res = await request(app).get('/store/cancel');
     expect(res.status).toBe(200);
-    expect(res.text).toContain('Payment cancelled. Nothing was charged.');
+    expect(res.text).toContain('Payment canceled. Nothing was charged.');
     expect(res.text).toContain('Back to the store');
   });
 });

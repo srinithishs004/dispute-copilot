@@ -164,7 +164,7 @@ export function toStudioData(feed: DashboardFeed, now: number = Date.now()): AgD
     text('deadlineFlag', 'Deadline flag', 'due_soon when under 3 days are left, overdue after the deadline, otherwise empty.'),
     text('recommendation', 'AI recommendation', 'What the AI suggested: Fight, Partial refund or Accept. Empty before analysis.'),
     int('confidence', 'AI confidence', 'Confidence of the latest AI analysis, 0 to 100.'),
-    text('evidenceStrength', 'Evidence strength', 'How strong the seller evidence is: Strong, Moderate or Weak.'),
+    text('evidenceStrength', 'Evidence strength', 'How strong the seller evidence is: Strong, Medium or Weak.'),
     text('outcome', 'Outcome', 'Resolved disputes only: who PayPal decided for.'),
     date('createdAt', 'Opened', 'When the buyer opened the dispute.'),
   ];

@@ -21,7 +21,7 @@ Field glossary:
 - disputes.originalAmount: amount the buyer disputed. disputes.currency: its currency.
 - disputes.amountKept and disputes.amountRefunded: set only on resolved rows (disputes.resolved is true), empty while open. Money kept is the sum of amountKept over resolved rows.
 - disputes.deadline: deadline in words ("3 days left", "Overdue by 2 days"). disputes.daysLeft: days to respond, rounded up; 0 or less means overdue; empty when resolved. Due this week means open rows with daysLeft of 7 or less.
-- disputes.recommendation: the AI pick, Fight, Partial refund or Accept. disputes.confidence: AI confidence, 0 to 100. disputes.evidenceStrength: Strong, Moderate or Weak.
+- disputes.recommendation: the AI pick, Fight, Partial refund or Accept. disputes.confidence: AI confidence, 0 to 100. disputes.evidenceStrength: Strong, Medium or Weak.
 - disputes.outcome: resolved rows only, who PayPal decided for.
 - disputes.localState: where the dispute is in this app. actions.state: Pending, Sent or Failed. evidence_gaps.requirement: the missing item.
 
