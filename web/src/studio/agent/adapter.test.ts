@@ -178,6 +178,12 @@ describe('createProxyAdapter', () => {
 
     const noOutput = createProxyAdapter(async () => jsonResponse(200, { id: 'x', status: 'completed' })).executeTurn(request);
     expect(onlyText(await noOutput.complete)).toBe(GENERIC_FAILURE);
+
+    const badItem = createProxyAdapter(async () =>
+      jsonResponse(200, { id: 'x', status: 'completed', output: [{ id: 'm', type: 'message', role: 'assistant' }] }),
+    ).executeTurn(request);
+    expect(onlyText(await badItem.complete)).toBe(GENERIC_FAILURE);
+    await expect(collect(badItem.stream)).resolves.toBeTruthy();
   });
 
   it('rejects with the abort error when the run is cancelled, instead of posting a message', async () => {

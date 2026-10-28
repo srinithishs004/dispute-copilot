@@ -71,7 +71,17 @@ const isAbort = (e: unknown) => e instanceof Error && e.name === 'AbortError';
 function isResponse(x: unknown): x is AgLlmResponse {
   if (typeof x !== 'object' || x === null) return false;
   const r = x as Record<string, unknown>;
-  return typeof r.id === 'string' && typeof r.status === 'string' && Array.isArray(r.output);
+  if (typeof r.id !== 'string' || typeof r.status !== 'string' || !Array.isArray(r.output)) return false;
+  // Every item must have the fields eventsFrom reads, or the turn falls back to the generic message.
+  return r.output.every((item: unknown) => {
+    if (typeof item !== 'object' || item === null) return false;
+    const i = item as Record<string, unknown>;
+    if (i.type === 'message') return typeof i.id === 'string' && Array.isArray(i.content);
+    if (i.type === 'function_call') {
+      return typeof i.callId === 'string' && typeof i.name === 'string' && typeof i.arguments === 'string';
+    }
+    return true;
+  });
 }
 
 async function turn(fetchImpl: FetchLike, request: AgLlmRequest, signal?: AbortSignal): Promise<AgLlmResponse> {
