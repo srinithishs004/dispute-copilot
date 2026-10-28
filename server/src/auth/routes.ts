@@ -1,13 +1,19 @@
 import { Router } from 'express';
 import type { AppDeps } from '../app.js';
-import { COOKIE_NAME, SESSION_TTL_MS, parseCookies, readSession, signSession, verifyPassword, type Role } from './session.js';
+import { sessionFromCookie } from './guards.js';
+import { COOKIE_NAME, SESSION_TTL_MS, signSession, verifyPassword, type Role } from './session.js';
 
 const MAX_FAILURES = 10;
 const WINDOW_MS = 15 * 60 * 1000;
 // A real scrypt hash of nothing in particular, so unknown emails cost the same as bad passwords.
 const DUMMY_HASH = 'scrypt$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
-/** In-memory failed-login counter per key. Successes are not counted and do not reset anything. */
+const MAX_KEYS = 10_000;
+
+/**
+ * In-memory failed-login counter per key. An attempt is reserved before the password is checked
+ * (so parallel requests cannot all slip under the limit) and refunded on success.
+ */
 export function makeLoginLimiter(now: () => number) {
   const hits = new Map<string, { count: number; resetAt: number }>();
   const live = (key: string) => {
@@ -19,15 +25,32 @@ export function makeLoginLimiter(now: () => number) {
     return e;
   };
   return {
-    blocked(key: string): boolean {
-      return (live(key)?.count ?? 0) >= MAX_FAILURES;
-    },
-    fail(key: string): void {
+    /** Returns false when the key is over the limit; otherwise counts this attempt. */
+    reserve(key: string): boolean {
       const e = live(key);
-      if (e) e.count += 1;
-      else hits.set(key, { count: 1, resetAt: now() + WINDOW_MS });
-      if (hits.size > 10_000) for (const k of hits.keys()) live(k);
+      if (e) {
+        if (e.count >= MAX_FAILURES) return false;
+        e.count += 1;
+        return true;
+      }
+      if (hits.size >= MAX_KEYS) {
+        for (const k of [...hits.keys()]) live(k);
+        // Map iterates in insertion order, so the first keys are the oldest.
+        for (const k of hits.keys()) {
+          if (hits.size < MAX_KEYS) break;
+          hits.delete(k);
+        }
+      }
+      hits.set(key, { count: 1, resetAt: now() + WINDOW_MS });
+      return true;
     },
+    refund(key: string): void {
+      const e = hits.get(key);
+      if (!e) return;
+      e.count -= 1;
+      if (e.count <= 0) hits.delete(key);
+    },
+    size: () => hits.size,
   };
 }
 
@@ -51,12 +74,14 @@ export function authRoutes(deps: AppDeps): Router {
       return;
     }
     const key = req.ip ?? 'unknown';
-    if (limiter.blocked(key)) {
+    if (!limiter.reserve(key)) {
       res.status(429).json({ error: 'too many attempts, try again later' });
       return;
     }
     const body = (typeof req.body === 'object' && req.body !== null ? req.body : {}) as Record<string, unknown>;
+    // Malformed bodies still spend the reservation (cheap to reject, so refund).
     if (typeof body.email !== 'string' || typeof body.password !== 'string' || body.email === '' || body.password === '') {
+      limiter.refund(key);
       res.status(400).json({ error: 'email and password are required' });
       return;
     }
@@ -68,11 +93,11 @@ export function authRoutes(deps: AppDeps): Router {
     const match = candidates.find(([, a]) => a !== null && a.email.trim().toLowerCase() === email);
     const ok = await verifyPassword(body.password, match?.[1]?.passwordHash ?? DUMMY_HASH);
     if (!match || !match[1] || !ok) {
-      limiter.fail(key);
       logger.info('auth: login failed');
       res.status(401).json({ error: 'invalid email or password' });
       return;
     }
+    limiter.refund(key);
     const [role, account] = match;
     const value = signSession({ role, email: account.email }, secret, now());
     res.cookie(COOKIE_NAME, value, { ...cookieOpts(), maxAge: SESSION_TTL_MS });
@@ -86,8 +111,7 @@ export function authRoutes(deps: AppDeps): Router {
   });
 
   router.get('/auth/me', (req, res) => {
-    const raw = parseCookies(req.headers.cookie)[COOKIE_NAME];
-    const s = raw !== undefined && config.auth.sessionSecret !== null ? readSession(raw, config.auth.sessionSecret, now()) : null;
+    const s = sessionFromCookie(req, config, now());
     if (!s) {
       res.status(401).json({ error: 'unauthorized' });
       return;

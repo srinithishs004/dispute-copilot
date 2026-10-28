@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
+import { makeLoginLimiter } from '../../src/auth/routes.js';
 import { hashPassword } from '../../src/auth/session.js';
 import type { Config } from '../../src/config.js';
 import { makeTestDb, makeTestDeps, testConfig } from '../helpers.js';
@@ -96,6 +97,34 @@ describe('POST /auth/login', () => {
     expect((await login(app, 'owner@x.test', 'owner-pw')).status).toBe(200);
   });
 
+  it('parallel wrong-password attempts cannot bypass the limit', async () => {
+    const app = await appWith();
+    const results = await Promise.all(Array.from({ length: 15 }, () => login(app, 'owner@x.test', 'bad')));
+    expect(results.filter((r) => r.status === 429).length).toBeGreaterThanOrEqual(5);
+    expect(results.filter((r) => r.status === 401).length).toBeLessThanOrEqual(10);
+  });
+
+  it('with trust proxy, different X-Forwarded-For clients get separate buckets', async () => {
+    const app = await appWith({ trustProxy: 1 });
+    const from = (ip: string) => request(app).post('/auth/login').set('X-Forwarded-For', ip).send({ email: 'owner@x.test', password: 'bad' });
+    for (let i = 0; i < 10; i++) expect((await from('1.1.1.1')).status).toBe(401);
+    expect((await from('1.1.1.1')).status).toBe(429);
+    expect((await from('2.2.2.2')).status).toBe(401);
+  });
+
+  it('without trust proxy, X-Forwarded-For is ignored', async () => {
+    const app = await appWith({ trustProxy: 0 });
+    const from = (ip: string) => request(app).post('/auth/login').set('X-Forwarded-For', ip).send({ email: 'owner@x.test', password: 'bad' });
+    for (let i = 0; i < 10; i++) await from(`9.9.9.${i}`);
+    expect((await from('3.3.3.3')).status).toBe(429);
+  });
+
+  it('limiter caps its key count by evicting the oldest', () => {
+    const l = makeLoginLimiter(() => 1000);
+    for (let i = 0; i < 10_050; i++) l.reserve(`k${i}`);
+    expect(l.size()).toBeLessThanOrEqual(10_000);
+  });
+
   it('successful logins do not count toward the limit', async () => {
     const app = await appWith();
     for (let i = 0; i < 12; i++) expect((await login(app, 'owner@x.test', 'owner-pw')).status).toBe(200);
@@ -123,6 +152,18 @@ describe('/auth/me and logout', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ email: 'judge@x.test', role: 'judge' });
     expect((await request(app).get('/auth/me').set('Cookie', 'dc_session=junk')).status).toBe(401);
+  });
+
+  it('a session is revoked when its account is removed or its email changes', async () => {
+    const app = await appWith();
+    const c = await cookieFor(app, 'judge');
+    const gone = await appWith({ auth: { ...config.auth, judge: null } });
+    expect((await request(gone).get('/auth/me').set('Cookie', c)).status).toBe(401);
+    expect((await request(gone).get('/api/disputes').set('Cookie', c)).status).toBe(401);
+    const renamed = await appWith({ auth: { ...config.auth, judge: { ...config.auth.judge!, email: 'other@x.test' } } });
+    expect((await request(renamed).get('/auth/me').set('Cookie', c)).status).toBe(401);
+    const cased = await appWith({ auth: { ...config.auth, judge: { ...config.auth.judge!, email: 'JUDGE@x.test' } } });
+    expect((await request(cased).get('/auth/me').set('Cookie', c)).status).toBe(200);
   });
 
   it('logout clears the cookie', async () => {

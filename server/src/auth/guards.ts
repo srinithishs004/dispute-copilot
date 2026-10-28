@@ -18,6 +18,17 @@ declare module 'express-serve-static-core' {
 
 type Deps = { config: Config; now?: () => number };
 
+/** Cookie session still valid: signed, unexpired, and its account is still configured with the same email. */
+export function sessionFromCookie(req: Request, config: Config, now: number): Seller | null {
+  const raw = parseCookies(req.headers.cookie)[COOKIE_NAME];
+  if (raw === undefined || config.auth.sessionSecret === null) return null;
+  const s = readSession(raw, config.auth.sessionSecret, now);
+  if (!s) return null;
+  const account = config.auth[s.role];
+  if (!account || account.email.trim().toLowerCase() !== s.email.trim().toLowerCase()) return null;
+  return { role: s.role, email: s.email };
+}
+
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 function tokenMatches(provided: string | undefined, expected: string): boolean {
@@ -42,14 +53,12 @@ export function requireSeller({ config, now = Date.now }: Deps): RequestHandler 
       return;
     }
     const raw = parseCookies(req.headers.cookie)[COOKIE_NAME];
-    if (raw !== undefined && config.auth.sessionSecret !== null) {
-      const s = readSession(raw, config.auth.sessionSecret, now());
-      if (s) {
-        res.locals.seller = { role: s.role, email: s.email };
-        res.locals.sellerVia = 'cookie';
-        next();
-        return;
-      }
+    const s = sessionFromCookie(req, config, now());
+    if (s) {
+      res.locals.seller = s;
+      res.locals.sellerVia = 'cookie';
+      next();
+      return;
     }
     // Debug-token path keeps its original behaviour: 404 when none is configured and no session was offered.
     if (config.debugToken === null && raw === undefined) {

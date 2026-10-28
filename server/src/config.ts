@@ -11,6 +11,8 @@ export interface Config {
     webhookId: string | null;
   };
   debugToken: string | null;
+  /** Reverse-proxy hops to trust for req.ip (Express `trust proxy`). */
+  trustProxy: number;
   /** Seller-app logins. A missing account is disabled; no secret disables login entirely. */
   auth: { owner: Account | null; judge: Account | null; sessionSecret: string | null };
   databaseUrl: string | null;
@@ -51,6 +53,7 @@ const EnvSchema = z.object({
   ),
   PAYPAL_WEBHOOK_ID: optional,
   DEBUG_TOKEN: optional,
+  TRUST_PROXY: z.preprocess(blankToUndefined, z.coerce.number().int().min(0).optional()),
   OWNER_EMAIL: optional,
   OWNER_PASSWORD_HASH: optional,
   JUDGE_EMAIL: optional,
@@ -72,6 +75,16 @@ const EnvSchema = z.object({
   LLM_TIMEOUT_MS: z.preprocess(blankToUndefined, z.coerce.number().int().min(5_000).max(90_000).default(45_000)),
 }).superRefine((e, ctx) => {
   // An account needs both halves; name whichever is missing.
+  const HASH_RE = /^scrypt\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/;
+  for (const key of ['OWNER_PASSWORD_HASH', 'JUDGE_PASSWORD_HASH'] as const) {
+    const v = e[key];
+    if (v !== undefined && !HASH_RE.test(v)) {
+      ctx.addIssue({ code: 'custom', path: [key], message: `${key} must be a scrypt hash (npm run hash-password -w server -- 'pw')` });
+    }
+  }
+  if (e.OWNER_EMAIL !== undefined && e.JUDGE_EMAIL !== undefined && e.OWNER_EMAIL.trim().toLowerCase() === e.JUDGE_EMAIL.trim().toLowerCase()) {
+    ctx.addIssue({ code: 'custom', path: ['JUDGE_EMAIL'], message: 'JUDGE_EMAIL must differ from OWNER_EMAIL' });
+  }
   for (const [email, hash] of [
     ['OWNER_EMAIL', 'OWNER_PASSWORD_HASH'],
     ['JUDGE_EMAIL', 'JUDGE_PASSWORD_HASH'],
@@ -104,6 +117,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
       webhookId: e.PAYPAL_WEBHOOK_ID ?? null,
     },
     debugToken: e.DEBUG_TOKEN ?? null,
+    trustProxy: e.TRUST_PROXY ?? (env.NODE_ENV === 'production' ? 1 : 0),
     auth: {
       owner: account(e.OWNER_EMAIL, e.OWNER_PASSWORD_HASH),
       judge: account(e.JUDGE_EMAIL, e.JUDGE_PASSWORD_HASH),

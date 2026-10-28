@@ -30,6 +30,7 @@ interface HttpError {
 export function createApp(deps: AppDeps): express.Express {
   const app = express();
   const logger = deps.logger ?? console;
+  app.set('trust proxy', deps.config.trustProxy);
   app.use(
     express.json({
       verify: (req, _res, buf) => {
