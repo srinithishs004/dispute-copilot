@@ -4,6 +4,7 @@ import type { Config } from './config.js';
 import type { PayPalClient } from './paypal/client.js';
 import { authRoutes } from './auth/routes.js';
 import { actionRoutes } from './routes/actions.js';
+import { agentRoutes } from './routes/agent.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { disputeRoutes } from './routes/disputes.js';
 import { storeRoutes } from './routes/store.js';
@@ -16,6 +17,8 @@ export interface AppDeps {
   logger?: Pick<Console, 'info' | 'warn'>;
   /** Epoch-ms clock for sessions and the login rate limit; tests inject it. */
   now?: () => number;
+  /** fetch for request-time LLM calls (the agent proxy); tests inject a fake. */
+  llmFetch?: typeof fetch;
 }
 
 // Reserved for future webhook signature debugging; not read anywhere yet.
@@ -32,6 +35,8 @@ export function createApp(deps: AppDeps): express.Express {
   const app = express();
   const logger = deps.logger ?? console;
   app.set('trust proxy', deps.config.trustProxy);
+  // Before the global JSON parser: agent turns carry up to 512 KB and parse after auth.
+  app.use(agentRoutes(deps));
   app.use(
     express.json({
       verify: (req, _res, buf) => {
