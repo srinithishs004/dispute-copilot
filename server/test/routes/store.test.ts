@@ -2,6 +2,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createApp } from '../../src/app.js';
 import type { Db } from '../../src/db/db.js';
+import { errorPage, thankYouPage } from '../../src/store/pages.js';
 import { seedStore } from '../../src/store/seed.js';
 import { fakeClient, type RecordedCall } from '../paypal/fake.js';
 import { makeTestDb, makeTestDeps } from '../helpers.js';
@@ -36,6 +37,53 @@ describe('GET /store', () => {
     expect(res.text).toContain('Dispute Copilot Demo Store');
     for (const name of ['Ceramic Mug', 'Logo T-Shirt', 'Desk Lamp']) expect(res.text).toContain(name);
     expect(res.text.match(/Buy with PayPal/g)).toHaveLength(3);
+  });
+
+  test('uses the Kaala shell: top bar, sandbox note, footer, theme script and fonts', async () => {
+    const res = await request(app).get('/store');
+    expect(res.text).toContain('<a class="wordmark" href="/">Dispute Copilot</a>');
+    expect(res.text).toContain('Demo store');
+    expect(res.text).toContain('Sandbox demo. Pay with the sandbox buyer account from the guide. No real money moves.');
+    expect(res.text).toContain('href="/guide"');
+    expect(res.text).toContain('href="/privacy"');
+    expect(res.text).toContain('href="/terms"');
+    expect(res.text).toContain('Sandbox demo, no real money');
+    expect(res.text).toContain('<script src="/theme-init.js"></script>');
+    expect(res.text).toContain('fonts.googleapis.com/css2?family=');
+    expect(res.text).toContain('Manrope');
+    expect(res.text).toContain('JetBrains+Mono');
+    expect(res.text).toContain('[data-theme="day"]');
+    expect(res.text).toContain('prefers-color-scheme: light');
+    // The CSP forbids inline scripts: the only script tag is the external theme file.
+    expect(res.text.match(/<script/g)).toHaveLength(1);
+    expect(res.text).not.toMatch(/[\u2013\u2014]/);
+  });
+
+  test('the buy button keeps a visible focus ring', async () => {
+    const res = await request(app).get('/store');
+    expect(res.text).toMatch(/\.btn:focus-visible \{ box-shadow: var\(--focus\)/);
+  });
+
+  test('prices render in a mono, tabular element', async () => {
+    const res = await request(app).get('/store');
+    expect(res.text).toContain('<p class="price">$25.00</p>');
+    expect(res.text).toMatch(/\.price \{[^}]*font-variant-numeric: tabular-nums/);
+  });
+});
+
+describe('page HTML escaping', () => {
+  test('error pages escape the title and message', () => {
+    const html = errorPage('<img src=x onerror=alert(1)>', '"><script>alert(2)</script>');
+    expect(html).not.toContain('<img src=x');
+    expect(html).not.toContain('<script>alert');
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).toContain('&quot;&gt;&lt;script&gt;alert(2)&lt;/script&gt;');
+  });
+
+  test('the thank-you page escapes the order id', () => {
+    const html = thankYouPage('<b>ORD-1</b>');
+    expect(html).not.toContain('<b>ORD-1</b>');
+    expect(html).toContain('&lt;b&gt;ORD-1&lt;/b&gt;');
   });
 });
 
@@ -120,6 +168,7 @@ describe('GET /store/cancel', () => {
   test('shows a friendly cancelled page', async () => {
     const res = await request(app).get('/store/cancel');
     expect(res.status).toBe(200);
-    expect(res.text).toContain('nothing was charged');
+    expect(res.text).toContain('Payment cancelled. Nothing was charged.');
+    expect(res.text).toContain('Back to the store');
   });
 });

@@ -49,7 +49,9 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
-      # Build-time values for the judge guide page (public, judge-only sandbox accounts).
+      # VITE_* keys are read at build time, not at run time: they are baked into the web app by
+      # `npm run build`, so changing one needs a redeploy (a restart is not enough).
+      # These four fill the judge guide page (public, judge-only sandbox accounts).
       - key: VITE_JUDGE_EMAIL
         sync: false
       - key: VITE_JUDGE_PASSWORD

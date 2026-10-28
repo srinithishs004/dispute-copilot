@@ -1,89 +1,135 @@
 # Dispute Copilot
 
-Dispute Copilot is a PayPal disputes assistant for small sellers, built for the PayPal AI Hackathon. It talks to the PayPal sandbox APIs to help sellers understand and respond to disputes. It uses the sandbox only: no real money and no real customers.
+Dispute Copilot helps a small seller deal with PayPal disputes. When a buyer opens a dispute, it gathers the evidence, recommends fight, partial refund or accept, and drafts the response letter. The seller reads it and decides. Nothing goes to PayPal until the seller approves.
 
-## How it works now (Phase 1 and 2)
+It is an entry for the PayPal AI Hackathon and runs on the PayPal sandbox only: no real money and no real customers.
 
-1. A buyer pays for an item in the demo store at `/store` (PayPal sandbox checkout).
-2. The buyer opens a dispute in the PayPal sandbox.
-3. PayPal sends a webhook to `POST /webhooks/paypal`. The server checks the signature, saves the event, and puts a job in the queue.
-4. A worker picks up the job. It re-fetches the dispute from PayPal, matches it to our order, builds an evidence pack (plain code, no AI), and asks the AI to draft a response letter.
-5. The dispute moves to `READY_FOR_REVIEW` with the letter attached. You read it with `GET /api/disputes/<id>`.
+- Live: https://dispute-copilot-zv53.onrender.com
+- Judges: open [`/guide`](https://dispute-copilot-zv53.onrender.com/guide) for the sandbox accounts and a step by step walkthrough.
 
-Things to know:
+## Real result
 
-- **The AI never calls PayPal.** Nothing is sent to PayPal until you call `POST /api/disputes/<id>/approve`. The advisor recommends fight, offer or accept; you decide. Approval is API-only until the Phase 3 review screen.
-- **The job queue is a Postgres table** called `jobs`, not an external queue. A job is locked while a worker runs it (5 minute lease) and is tried up to 3 times, 30 seconds apart.
-- **If no AI key works**, the dispute ends in `NEEDS_MANUAL` with the reason "AI draft unavailable".
+On Oct 27, 2026 a $25 sandbox order was disputed by the buyer. The app recommended a partial refund, the seller approved a $12.50 offer in PayPal, the buyer accepted, and the dispute resolved. That is the one end to end run so far.
 
-## Run locally
+## Features
 
-1. `npm install`
-2. Copy the example settings: `cp .env.example .env` (PowerShell: `Copy-Item .env.example .env`). Fill in your PayPal sandbox credentials and a `DEBUG_TOKEN` (any long random string you make up).
-3. `npm run dev` starts the web server and the job worker together, in one process. Open http://localhost:3000/store.
-4. `npm test` runs the tests. They never touch the network.
+- **Review page.** One screen per dispute: the evidence and what is missing, the AI recommendation with its confidence, an editable letter, and the approve step. The seller picks the action. The AI never calls PayPal and never approves.
+- **AG Studio dashboard.** Disputes, actions and evidence gaps in AG Studio, with two custom widgets (Action needed and Money protected), a chart set and a grid of all disputes. Themed with the Kaala design system, night and day.
+- **Dispute Analyst.** A custom agent on the AG Studio Agent Framework. It answers questions about the dashboard data in plain English and hands chart building to Studio's built-in agents. It is read only.
+- **AI through a server proxy.** Gemini is tried first, then Groq. The browser never sees an AI key: the agent panel posts to `POST /api/agent/turn` and the server calls the provider.
+- **PayPal sandbox webhooks and actions.** Dispute webhooks are verified and queued. Approved actions (fight, offer, accept) are sent to the PayPal Disputes API by a worker.
+- **Two logins.** An owner (everything) and a judge (read and approve, no sync, settle or debug endpoints).
 
-`npm run build` compiles the server and `npm start` runs the compiled build (this is what Render does).
+## Architecture
+
+```
+Buyer ── pays ──> /store (server-rendered demo store) ──> PayPal sandbox Orders API
+Buyer opens a dispute in the PayPal sandbox
+        │
+        ▼ webhook
+POST /webhooks/paypal ── verify signature ── save event ── queue job (jobs table)
+        │
+        ▼
+Worker (runs inline in the web process)
+  fetch dispute ── match order ── evidence pack (code) ── advisor (AI) ── letter (AI)
+  state: READY_FOR_REVIEW
+        │
+        ▼
+Browser: React app (web/, served by Express)
+  /login ── /dashboard (AG Studio + Dispute Analyst) ── /disputes/:id (Review) ── /guide
+        │ session cookie
+        ▼
+Express API: /auth  /api/dashboard  /api/disputes  /api/agent/turn
+  approve ── queue action job ── worker ── PayPal Disputes API
+  agent turn ── Gemini, then Groq (keys stay on the server)
+
+Postgres (Render) or PGlite (local) holds orders, events, disputes, jobs and actions.
+```
+
+One Render web service serves the API, the store and the built web app, so there is one URL and the cookie is same site. The job queue is a Postgres table, not an external queue.
 
 ## Environment variables
 
-Set these in `.env` at the repo root (a blank value counts as not set). Never commit `.env`.
+Set these in `.env` at the repo root (a blank value counts as not set) or in the Render dashboard. Never commit `.env`. `.env.example` lists every key with empty values.
 
-| Variable | Default | What it is |
-|---|---|---|
-| `PORT` | `3000` | Port the server listens on. |
-| `PAYPAL_CLIENT_ID` | none, required | Sandbox REST app client ID. |
-| `PAYPAL_CLIENT_SECRET` | none, required | Sandbox REST app secret. |
-| `PAYPAL_BASE_URL` | `https://api-m.sandbox.paypal.com` | Must be the sandbox API host. Any other host is rejected at startup. |
-| `PAYPAL_WEBHOOK_ID` | none | Webhook ID from the developer dashboard. Without it, webhooks cannot be verified. |
-| `DEBUG_TOKEN` | none | Secret for the protected endpoints. If unset, those endpoints return 404. |
-| `PUBLIC_BASE_URL` | `http://localhost:3000` | Public address of this server. PayPal sends the buyer back to `<PUBLIC_BASE_URL>/store/return`. Set it to your Render URL when deployed. It is not in `.env.example`; add it yourself. |
-| `DATABASE_URL` | none | Postgres connection string. If unset, the app uses a local PGlite database. |
-| `PGLITE_DIR` | `.data/pglite` | Folder for the PGlite data when `DATABASE_URL` is unset. |
-| `RUN_WORKER_INLINE` | `true` if `DATABASE_URL` is unset, else `false` | Run the job worker inside the web process. Set `true` or `false` to override. It is not in `.env.example`; add it yourself if needed. |
-| `GEMINI_API_KEY` | none | Gemini key. Tried first. |
-| `GEMINI_MODEL` | `gemini-3.6-flash` | Gemini model name. |
-| `GROQ_API_KEY` | none | Groq key. Used if Gemini fails or has no key. |
-| `GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model name. |
-| `LLM_TIMEOUT_MS` | `45000` | Time limit for each AI call (5000–90000). |
-| `STORE_NAME` | `Dispute Copilot Demo Store` | Store name the AI letter signs off with (the seller name used in the letter). |
+| Variable | What it is for |
+|---|---|
+| `PORT` | Port the server listens on. Default 3000. |
+| `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` | Sandbox REST app credentials. Required. |
+| `PAYPAL_BASE_URL` | PayPal API host. Must be the sandbox host; anything else is rejected at startup. |
+| `PAYPAL_WEBHOOK_ID` | Webhook ID from the PayPal developer dashboard. Without it, webhooks cannot be verified. |
+| `PUBLIC_BASE_URL` | Public address of this server. PayPal returns buyers to it, and the approve route checks the request origin against it. |
+| `DEBUG_TOKEN` | Optional secret for the `x-debug-token` header on the API (treated as owner). If unset, token access is off. |
+| `OWNER_EMAIL`, `OWNER_PASSWORD_HASH` | Owner login. Both or neither. |
+| `JUDGE_EMAIL`, `JUDGE_PASSWORD_HASH` | Judge login. Both or neither. Must differ from the owner email. |
+| `SESSION_SECRET` | Signs the session cookie. 32 characters or more. Needed for any login. |
+| `TRUST_PROXY` | Reverse proxy hops to trust for client IPs. Default 1 in production, else 0. |
+| `DATABASE_URL` | Postgres connection string. If unset, a local PGlite database is used. |
+| `PGLITE_DIR` | Folder for PGlite data when `DATABASE_URL` is unset. Default `.data/pglite`. |
+| `RUN_WORKER_INLINE` | Run the job worker inside the web process. Default on when `DATABASE_URL` is unset; `render.yaml` sets it on. |
+| `STORE_NAME` | Seller name the AI letter signs with. |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | Gemini key and model. Tried first. |
+| `GROQ_API_KEY`, `GROQ_MODEL` | Groq key and model. Used when Gemini fails or has no key. |
+| `LLM_TIMEOUT_MS` | Time limit for each AI call, 5000 to 90000. |
+| `VITE_JUDGE_EMAIL`, `VITE_JUDGE_PASSWORD` | Judge login shown on `/guide`. Build time and public, so use judge-only sandbox values. |
+| `VITE_SANDBOX_BUYER_EMAIL`, `VITE_SANDBOX_BUYER_PASSWORD` | Sandbox buyer account shown on `/guide`. Build time and public. |
+| `VITE_AG_STUDIO_LICENSE_KEY` | AG Studio licence key, a public client key. Build time. |
 
-You need at least one of `GEMINI_API_KEY` or `GROQ_API_KEY` to get a letter. A provider without a key is skipped.
+`VITE_*` keys are read when `npm run build` runs, so after changing one you must rebuild (on Render, redeploy). You need at least one of `GEMINI_API_KEY` or `GROQ_API_KEY` to get a letter. If no AI key works, the dispute ends in `NEEDS_MANUAL` with the reason "AI draft unavailable".
 
-### Database
+## Run locally
 
-- With no `DATABASE_URL`, data lives in PGlite files under `.data/pglite` and survives restarts. Delete that folder to start fresh.
-- On Render the app uses a small paid Render Postgres (`dispute-copilot-db`, Basic-256mb, paid from Render credits), wired through `render.yaml`. The free web service sleeps and loses its local files, so PGlite is only for local development. `render.yaml` sets `RUN_WORKER_INLINE=true` because there is no separate worker yet.
+Needs Node 22.
 
-## Endpoints
+1. `npm ci`
+2. `cp .env.example .env` (PowerShell: `Copy-Item .env.example .env`) and fill in your PayPal sandbox credentials, an AI key, the login keys and `SESSION_SECRET`.
+3. Production style, one process serving everything:
+   ```
+   npm run build
+   npm start
+   ```
+   Open http://localhost:3000. `npm start` needs the build first; with no `DATABASE_URL` it uses PGlite and runs the worker inline.
+4. Dev mode, two terminals:
+   ```
+   npm run dev            # API, store and worker on :3000 (restarts on change)
+   npm run dev -w web     # Vite dev server on :5173, proxies /auth /api /store /health to :3000
+   ```
+   Open http://localhost:5173. The approve route checks the request origin against `PUBLIC_BASE_URL`, so set `PUBLIC_BASE_URL=http://localhost:5173` for approving in dev mode, or use the built app on :3000.
 
-| Endpoint | Token needed | What it does |
-|---|---|---|
-| `GET /health` | no | Returns `{"ok":true}`. |
-| `GET /store` | no | Demo store page. |
-| `POST /store/checkout` | no | Starts a PayPal sandbox checkout (the store page calls it). |
-| `GET /store/return` | no | PayPal sends the buyer back here. The server captures the payment. |
-| `GET /store/cancel` | no | Where the buyer lands if they cancel. |
-| `POST /webhooks/paypal` | no (PayPal signature) | Receives dispute webhooks. |
-| `GET /debug/events` | yes | The last 50 webhook events. |
-| `POST /api/disputes/sync` | yes | Pulls disputes from PayPal and queues them. Use it if a webhook is slow. |
-| `GET /api/disputes` | yes | List of disputes. |
-| `GET /api/disputes/<id>` | yes | One dispute with its evidence pack, latest recommendation and letter, allowed actions and action history. |
-| `POST /api/disputes/<id>/approve` | yes | Seller approval. Body `{action, note, offerAmount?}` with action `FIGHT`, `OFFER` or `ACCEPT`. Queues the PayPal call (202). |
-| `POST /api/disputes/<id>/sandbox/settle` | yes | Sandbox demo only. Body `{outcome}` with `SELLER_FAVOR` or `BUYER_FAVOR`. 202 if PayPal allows settling, otherwise 409 with a hint. |
+### Password hashes
 
-Send the token in the `x-debug-token` header. Example:
+Logins store only scrypt hashes. Make one with:
 
 ```
-curl -H "x-debug-token: <YOUR_DEBUG_TOKEN>" http://localhost:3000/api/disputes
+npm run hash-password -w server -- '<pw>'
 ```
+
+Put the output in `OWNER_PASSWORD_HASH` or `JUDGE_PASSWORD_HASH`. The password is passed as a command line argument, so it lands in your shell history. Clear that history afterwards, or run the command in a throwaway shell.
+
+## Tests
+
+```
+npm test -w server     # about 3.5 minutes, no network
+npm test -w web
+npm run build          # builds server and web
+```
+
+Server tests use supertest and PGlite with PayPal and AI calls mocked. Web tests use Vitest, jsdom and Testing Library.
+
+## Known limitations
+
+- **The sandbox refuses the seller settle step.** The owner-only `POST /api/disputes/<id>/sandbox/settle` could not settle a dispute in our runs. The demo resolves by the buyer accepting the offer in the PayPal sandbox instead.
+- **Cold start.** On Render's free plan the service sleeps when idle, and the first request can take about 30 seconds. The app shows a waking up screen meanwhile.
+- **AG Studio licence watermark.** Without `VITE_AG_STUDIO_LICENSE_KEY` the dashboard shows AG Studio's trial watermark on any host other than localhost.
+- **The Dispute Analyst needs a wide screen.** On phones the dashboard shows the widgets and a note, but not the chat panel.
 
 ## Logging and privacy
 
 - Logged IDs go through `maskId` (`server/src/log.ts`), so full IDs never appear in logs.
-- We never log tokens, secrets, request bodies, emails, prompts or letters.
+- Tokens, secrets, passwords, cookies, request bodies, emails, prompts and letters are never logged.
 - Emails are redacted before any text is sent to an AI provider.
 
-## Testing against the PayPal sandbox
+## More
 
-See [docs/runbooks/sandbox-dispute.md](docs/runbooks/sandbox-dispute.md) for creating a sandbox payment and a real dispute. Typecheck the spike scripts with `npm run typecheck:scripts -w server`.
+- [Runbook: create a sandbox payment and a dispute](docs/runbooks/sandbox-dispute.md)
+- [Main design spec](docs/superpowers/specs/2026-10-13-dispute-copilot-design.md) and [Phase 3 spec](docs/superpowers/specs/2026-10-27-phase3-seller-app-design.md)

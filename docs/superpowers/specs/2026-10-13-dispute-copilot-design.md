@@ -70,6 +70,8 @@ Plus, for the pitch: run the advisor over 10–15 sample cases and show results 
 | Tests | Vitest + supertest; PayPal/AI calls mocked | Fast, no network in unit tests |
 | Hosting | Render: web service, background worker, cron job, Postgres | Sponsor tool |
 
+**Phase 3 note (web app).** The frontend is a React 18 + Vite app in `web/` using the Kaala design system (night and day themes). The seller dashboard is AG Studio (`ag-studio` and `ag-studio-react` 3.0.0) with custom widgets and the Dispute Analyst agent; AG Grid Community is used through Studio's grid widget. The server-rendered demo store at `/store` uses the same Kaala tokens. See the Phase 3 spec for details.
+
 ## 6. Architecture
 
 ```
@@ -104,6 +106,12 @@ Buyer opens dispute in sandbox ──> PayPal sends webhook
 1. **Own `jobs` table instead of pg-boss.** Jobs are claimed with `FOR UPDATE SKIP LOCKED`. A claimed job has a 5 minute lease; if the worker dies, the job becomes claimable again. Each job gets 3 attempts with a 30 second retry delay.
 2. **PGlite when there is no `DATABASE_URL`.** Data is stored at `.data/pglite` (env `PGLITE_DIR`). In that mode the worker runs inside the web process (`RUN_WORKER_INLINE`, default true only when `DATABASE_URL` is unset). With Postgres, a separate worker process can run the jobs. Render's free web service has no persistent disk and loses local files when it sleeps (~15 min idle), so store orders would vanish. Decision (2026-10-16, Sri): Render uses a Basic-256mb Render Postgres paid from credits (`render.yaml` `databases`), with `RUN_WORKER_INLINE=true` on the web service.
 3. **Fight-only letter in Phase 1.** The letter is drafted for the FIGHT stance only. The Phase 2 advisor will pick fight, offer or accept, and the drafter will follow its choice.
+
+**Phase 3 decisions (web app and auth)**
+
+1. **One service, one URL.** `npm run build` builds the server and the web app, and the Express server serves the built app (`server/dist/web`) with a single page fallback. API paths (`/api`, `/auth`, `/webhooks`, `/store`, `/debug`, `/health`) are never answered by the fallback.
+2. **Two roles from env vars.** Owner and judge log in with email and password (scrypt hashes in `OWNER_PASSWORD_HASH` and `JUDGE_PASSWORD_HASH`) and get a signed session cookie (`SESSION_SECRET`). The judge cannot run sync, sandbox settle or `/debug/events`. The seller routes also accept `x-debug-token`, treated as owner. Approve checks the request `Origin` against `PUBLIC_BASE_URL`.
+3. **AI keys stay on the server.** The Dispute Analyst runs in the browser but sends each model turn to `POST /api/agent/turn`, where the server calls Gemini, then Groq. The agent is read only.
 
 Three Render services share one codebase: `web` (API + built React app), `worker` (jobs), `cron` (deadline sweep).
 
@@ -258,6 +266,8 @@ Activity → payment → Report a problem → "I haven't received the item or se
 ## 14. Deployment
 
 `render.yaml` blueprint: web service, background worker, cron job (hourly deadline sweep), Postgres. (Phase 1 runs on the single web service with the inline worker and PGlite; the rest arrives later.) Env vars via a Render env group.
+
+**Phase 3 deploy keys.** Still one web service plus Postgres. `render.yaml` lists these as `sync: false` (set in the dashboard): `OWNER_EMAIL`, `OWNER_PASSWORD_HASH`, `JUDGE_EMAIL`, `JUDGE_PASSWORD_HASH`, `SESSION_SECRET`, `GEMINI_API_KEY`, `GROQ_API_KEY`, and the build-time public keys `VITE_AG_STUDIO_LICENSE_KEY`, `VITE_JUDGE_EMAIL`, `VITE_JUDGE_PASSWORD`, `VITE_SANDBOX_BUYER_EMAIL`, `VITE_SANDBOX_BUYER_PASSWORD`. `TRUST_PROXY` is `1` so the login rate limit sees real client IPs. `VITE_*` values are baked into the web build, so changing one needs a redeploy. The build command is `npm ci --include=dev && npm run build`.
 
 ## 15. Risks and open questions
 
