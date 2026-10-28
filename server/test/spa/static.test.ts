@@ -46,6 +46,8 @@ describe('serving the web app', () => {
     expect((await request(app).get('/health').set('Accept', 'text/html')).body).toEqual({ ok: true });
     const store = await request(app).get('/store').set('Accept', 'text/html');
     expect(store.text).not.toContain('<div id="root">');
+    expect(store.status).toBe(200);
+    expect(store.headers['content-security-policy']).toContain("frame-ancestors 'none'");
   });
 
   it('serves assets with a long immutable cache and other files for an hour', async () => {

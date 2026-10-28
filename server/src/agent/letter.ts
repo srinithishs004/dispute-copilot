@@ -36,7 +36,7 @@ const systemPrompt = (stance: Stance, storeName: string) =>
   ].join('\n');
 
 /** Claims about what the buyer asked for or agreed to need a cited buyer or message fact. */
-const BUYER_CLAIM_RE = /\byou (requested|asked for|agreed)\b|\byour request(ed)?\b/i;
+const BUYER_CLAIM_RE = /\byou(?:'ve| have| had)? (?:requested|asked(?: for| us)?|agreed)\b|\bas you asked\b|\byour request(?:ed)?\b/i;
 // Evidence facts: `dispute.buyer_message.<n>` (PayPal dispute thread) and `message.<n>` (order messages).
 const BUYER_FACT_PREFIXES = ['dispute.buyer_message', 'message.'];
 

@@ -214,6 +214,9 @@ describe('draftLetter buyer claims', () => {
     'You agreed to the terms of sale when you paid for the order delivered on Sep 20, 2026 as shown in our records.',
     'Regarding your request, the order was delivered on Sep 20, 2026 with the tracking number we recorded in our facts.',
     'Regarding your requested change, the order was delivered on Sep 20, 2026 with the tracking number we recorded.',
+    "As you've requested, we are refunding the order delivered on Sep 20, 2026 with the tracking number we recorded.",
+    'You had asked for a refund, and the order was delivered on Sep 20, 2026 with the tracking number we recorded.',
+    'As you asked, we are refunding the order that was delivered on Sep 20, 2026 with the tracking number we recorded.',
   ])('rejects "%s"', async (letter) => {
     await expect(
       draftLetter(fakeLlm({ letter, citedFactIds: ['order.id'] }), withBuyer, 'ACCEPT', [], opts),
