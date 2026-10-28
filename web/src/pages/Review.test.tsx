@@ -77,7 +77,8 @@ describe('Review page', () => {
     expect(screen.getByText('Item not received')).toBeTruthy();
     expect(screen.getByText('Ready for review')).toBeTruthy();
     expect(screen.getByText('6 days left')).toBeTruthy();
-    expect((screen.getByLabelText('Letter') as HTMLTextAreaElement).value).toBe(LETTER);
+    // The editor is filled by an effect after the first render; wait for it under load.
+    await waitFor(() => expect((screen.getByLabelText('Letter') as HTMLTextAreaElement).value).toBe(LETTER));
     expect((screen.getByLabelText('Offer amount') as HTMLInputElement).value).toBe('12.50');
     expect(screen.getByText('Nothing is sent to PayPal until you approve.')).toBeTruthy();
     // Picker limited to allowed actions, recommended preselected.
