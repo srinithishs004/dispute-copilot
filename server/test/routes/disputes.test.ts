@@ -66,6 +66,8 @@ describe('dispute routes', () => {
     expect(res.body.actions).toEqual([]);
     expect(res.body.manualReason).toBeNull();
     expect(res.body.amount).toBe('49.00');
+    expect(res.body.originalAmount).toBe('49.00');
+    expect(res.body.deadlineFlag).toBeNull();
   });
 
   it('maps the newest analysis to camelCase', async () => {
