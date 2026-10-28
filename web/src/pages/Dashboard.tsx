@@ -6,8 +6,15 @@ import { usePageTitle } from '../lib/usePageTitle';
 import { EmptyState } from '../components/EmptyState';
 import { AlertIcon, LayoutIcon } from '../components/Icons';
 
-// AG Studio is about 5.8 MB, so it loads only here; the feed downloads at the same time.
-const StudioReport = lazy(() => import('../studio/StudioReport'));
+// AG Studio is about 5.8 MB, so it loads only here; the feed downloads at the same time. The Dispute
+// Analyst harness comes in the same lazy load, because Studio reads `ai` only when it is created.
+const AnalystStudio = lazy(async () => {
+  const [{ default: StudioReport }, { analystAi }] = await Promise.all([
+    import('../studio/StudioReport'),
+    import('../studio/agent/harness'),
+  ]);
+  return { default: ({ feed }: { feed: DashboardFeed }) => <StudioReport feed={feed} ai={analystAi} /> };
+});
 
 const REFRESH_MS = 60_000;
 const CAPTION_TICK_MS = 15_000;
@@ -118,6 +125,12 @@ export function Dashboard() {
       <div className="dash-head__title">
         <span className="k-eyebrow">Seller disputes</span>
         <h1 className="t-h1">Dashboard</h1>
+        {feed && feed.sources.disputes.length > 0 ? (
+          // Studio hides its side panels on phones, so the chat is not there (shown by CSS under 720px).
+          <p className="dash-analyst-note" data-testid="analyst-note">
+            The Dispute Analyst chat works on wider screens.
+          </p>
+        ) : null}
       </div>
       {feed ? (
         <div className="dash-head__meta">
@@ -167,7 +180,7 @@ export function Dashboard() {
   } else {
     body = (
       <Suspense fallback={<DashboardSkeleton />}>
-        <StudioReport feed={feed} />
+        <AnalystStudio feed={feed} />
       </Suspense>
     );
   }

@@ -76,6 +76,42 @@ export function reportHeight(state: AgReportState): number {
   return bottom * ROW_PX + 48;
 }
 
+/** Shortest Studio host with the Analyst chat beside the canvas, so the chat stays usable. */
+export const MIN_AI_HOST_PX = 560;
+/** Room above the host on a wide screen: top bar plus the dashboard heading. */
+export const AI_HOST_VIEWPORT_OFFSET_PX = 200;
+
+/**
+ * CSS height of the Studio host.
+ *
+ * Without the Analyst it is the layout height, so the page scrolls and nothing scrolls inside Studio.
+ * With the Analyst on a wide screen it is bound to the viewport (Studio's canvas scrolls inside), so
+ * the chat header, prompt starters and message box are all on screen when the page opens; Studio's
+ * chat panel is as tall as the host and keeps its message box at the bottom. It still follows the
+ * layout, so a short report does not leave empty space.
+ */
+export function hostHeight(state: AgReportState, withAi: boolean, variant: LayoutVariant): number | string {
+  const px = reportHeight(state);
+  if (!withAi || variant !== 'wide') return px;
+  return `max(${MIN_AI_HOST_PX}px, min(${px}px, calc(100dvh - ${AI_HOST_VIEWPORT_OFFSET_PX}px)))`;
+}
+
+/**
+ * Pixel top of a widget that is in `next` but not in `prev` (the highest one when several), or null.
+ * Used to bring a widget the Analyst just added into view inside Studio's scrolling canvas.
+ */
+export function addedWidgetTop(prev: AgReportState, next: AgReportState): number | null {
+  const before = prev.pages[0]?.widgetLayout ?? {};
+  const after = next.pages[0]?.widgetLayout ?? {};
+  let top: number | null = null;
+  for (const [id, box] of Object.entries(after)) {
+    if (!box || id in before) continue;
+    const y = box.yTrack * ROW_PX;
+    top = top === null ? y : Math.min(top, y);
+  }
+  return top;
+}
+
 export function initialReport(variant: LayoutVariant = 'wide', openCount = 4): AgReportState {
   const widgets = {
     [WIDGET_IDS.actionNeeded]: {

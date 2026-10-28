@@ -9,10 +9,11 @@ import { Dashboard, updatedText } from './Dashboard';
 
 // The real report pulls in AG Studio (about 5.8 MB); the page logic is tested against a stand-in.
 vi.mock('../studio/StudioReport', () => ({
-  default: ({ feed }: { feed: DashboardFeed }) => (
-    <div data-testid="studio" data-count={feed.sources.disputes.length} data-at={feed.generatedAt} />
+  default: ({ feed, ai }: { feed: DashboardFeed; ai?: unknown }) => (
+    <div data-testid="studio" data-count={feed.sources.disputes.length} data-at={feed.generatedAt} data-ai={ai === 'analyst-ai' ? 'yes' : 'no'} />
   ),
 }));
+vi.mock('../studio/agent/harness', () => ({ analystAi: 'analyst-ai' }));
 
 const URL_ = '/api/dashboard/data';
 
@@ -56,12 +57,22 @@ describe('Dashboard page', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Dashboard');
   });
 
+  it('passes the Dispute Analyst harness to Studio on the first render, with the phone note', async () => {
+    mockFetch(() => json(200, feed([OCT27, openDispute({})])));
+    renderDashboard();
+    const studio = await screen.findByTestId('studio');
+    expect(studio.getAttribute('data-ai')).toBe('yes');
+    // Shown only under 720px by CSS, where Studio hides its side panels.
+    expect(screen.getByTestId('analyst-note').textContent).toBe('The Dispute Analyst chat works on wider screens.');
+  });
+
   it('shows an empty state with a link to the guide when there are no disputes', async () => {
     mockFetch(() => json(200, feed([])));
     renderDashboard();
     expect(await screen.findByText('No disputes yet')).toBeTruthy();
     expect(screen.getByRole('link', { name: /judge guide/i }).getAttribute('href')).toBe('/guide');
     expect(screen.queryByTestId('studio')).toBeNull();
+    expect(screen.queryByTestId('analyst-note')).toBeNull();
   });
 
   it('refreshes every 60 seconds while the tab is visible', async () => {
