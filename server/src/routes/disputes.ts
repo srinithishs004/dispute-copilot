@@ -4,13 +4,15 @@ import { listActions } from '../actions/repo.js';
 import { buildEvidencePack } from '../agent/evidence.js';
 import { allowedActions, type DisputeDetail } from '../paypal/disputes.js';
 import { findOrderBundle } from '../store/repo.js';
-import { makeRequireDebugToken } from './webhooks.js';
+import { requireSeller } from '../auth/guards.js';
 
 type Row = {
   paypal_dispute_id: string;
   reason: string | null;
   status: string | null;
   amount: string | null;
+  original_amount: string | null;
+  deadline_flag: string | null;
   currency: string | null;
   response_due_at: Date | string | null;
   local_state: string;
@@ -34,12 +36,12 @@ function summary(r: Row) {
 }
 
 const COLS =
-  'paypal_dispute_id, reason, status, amount, currency, response_due_at, local_state, manual_reason, order_id, raw';
+  'paypal_dispute_id, reason, status, amount, original_amount::text as original_amount, deadline_flag, currency, response_due_at, local_state, manual_reason, order_id, raw';
 
 export function disputeRoutes(deps: AppDeps): Router {
-  const { db, config } = deps;
+  const { db } = deps;
   const router = Router();
-  const guard = makeRequireDebugToken(config);
+  const guard = requireSeller(deps);
 
   router.get('/api/disputes', guard, async (_req, res) => {
     const { rows } = await db.query<Row>(
@@ -81,6 +83,8 @@ export function disputeRoutes(deps: AppDeps): Router {
     const actions = await listActions(db, r.paypal_dispute_id);
     res.json({
       ...summary(r),
+      originalAmount: r.original_amount == null ? null : String(r.original_amount),
+      deadlineFlag: r.deadline_flag,
       allowedActions: r.raw ? allowedActions(r.raw) : null,
       outcome: r.raw?.dispute_outcome?.outcome_code ?? null,
       actions: actions.map((x) => ({

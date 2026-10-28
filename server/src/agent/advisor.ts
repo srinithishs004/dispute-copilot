@@ -137,7 +137,7 @@ export async function advise(
   llm: Llm,
   pack: EvidencePack,
   detail: DisputeDetail,
-): Promise<{ advice: Advice; model: string }> {
+): Promise<{ advice: Advice; model: string; fallbackReasons: string[] }> {
   const allowed = allowedActions(detail);
   if (!allowed.fight && !allowed.offer && !allowed.accept) throw new AdviceUnavailableError();
 
@@ -150,6 +150,6 @@ export async function advise(
     ...pack.facts.map(factLine),
   ].join('\n');
 
-  const { data, model } = await llm.generateJson({ system: SYSTEM_PROMPT, user }, RawAdviceSchema);
-  return { advice: applyGuardrails(data, { pack, allowed }), model };
+  const { data, model, fallbackReasons } = await llm.generateJson({ system: SYSTEM_PROMPT, user }, RawAdviceSchema);
+  return { advice: applyGuardrails(data, { pack, allowed }), model, fallbackReasons: fallbackReasons ?? [] };
 }

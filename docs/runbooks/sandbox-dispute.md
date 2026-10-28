@@ -1,6 +1,8 @@
 # Runbook: create a sandbox payment and a real dispute
 
-Goal: produce a genuine PayPal **sandbox** dispute so we can see what the Disputes API and webhooks really return. Everything here uses sandbox accounts and fake money. Run all commands from the repo root.
+Goal: produce a genuine PayPal **sandbox** dispute and work it in the browser, from login to approval. Everything here uses sandbox accounts and fake money. Run all commands from the repo root.
+
+The main path (steps 1 to 8) uses only the browser. The `curl` and debug paths are kept at the end as the **owner appendix**.
 
 Never paste client secrets, tokens or full request headers into chat, issues or commits. The scripts only print IDs and statuses.
 
@@ -14,6 +16,8 @@ You need a PayPal developer account with a sandbox **Business** (merchant) accou
 
 Copy `.env.example` to `.env` in the repo root and set at least `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` from your sandbox REST app. Leave `PAYPAL_BASE_URL` as the sandbox URL (`https://api-m.sandbox.paypal.com`).
 
+To sign in to the app, also set `SESSION_SECRET` (32 characters or more) and at least one account: `JUDGE_EMAIL` plus `JUDGE_PASSWORD_HASH`, or `OWNER_EMAIL` plus `OWNER_PASSWORD_HASH`. Make a hash with `npm run hash-password -w server -- '<pw>'` (the password lands in your shell history, so clear it afterwards). See the README for every key.
+
 Success: the file exists and is not tracked by git (`git status` does not list it).
 
 ## Step 2: Start the server
@@ -22,7 +26,9 @@ Success: the file exists and is not tracked by git (`git status` does not list i
 npm run dev
 ```
 
-This starts the web server and the job worker together, using a local PGlite database (no Postgres needed). Set `DEBUG_TOKEN` in `.env` first. To get a letter, also set `GEMINI_API_KEY` or `GROQ_API_KEY`. PayPal sends buyers back to `PUBLIC_BASE_URL` (default `http://localhost:3000`), so keep it matching the address you open in the browser.
+This starts the API, the store and the job worker together, using a local PGlite database (no Postgres needed). To get a letter, also set `GEMINI_API_KEY` or `GROQ_API_KEY`. PayPal sends buyers back to `PUBLIC_BASE_URL` (default `http://localhost:3000`), so keep it matching the address you open in the browser.
+
+`npm run dev` serves the API and the store only. To use the web app, either run `npm run build` and `npm start` and open http://localhost:3000, or run `npm run dev -w web` as well and open http://localhost:5173 (then set `PUBLIC_BASE_URL=http://localhost:5173`, because approve checks the request origin).
 
 Success: http://localhost:3000/health shows `{"ok":true}`.
 
@@ -40,7 +46,41 @@ The exact sandbox menu wording may differ from this. Write down the options you 
 
 Success: the sandbox shows a dispute or case for the payment.
 
-## Step 5: Check the dispute through the API
+## Step 5: Sign in
+
+Open the app (http://localhost:3000 locally, https://dispute-copilot-zv53.onrender.com deployed) and choose **Sign in**. Use the judge or owner account from your `.env`. The judge can read and approve; only the owner can run the sync, the sandbox settle and the debug events.
+
+On the free Render plan the first request can take up to a minute while the service wakes. The app shows a waking up screen and retries.
+
+Success: you land on the dashboard, signed in.
+
+## Step 6: Find the dispute on the dashboard
+
+The dispute arrives by webhook, usually within about 5 minutes, then the AI gathers evidence and drafts a letter. On the dashboard it appears under **Action needed** with a deadline. The owner can run the sync call from the owner appendix (A1) if the webhook is slow.
+
+Success: your dispute is listed in **Action needed** with **Open review**.
+
+## Step 7: Review and approve
+
+Choose **Open review** to open `/disputes/<id>`. Read the evidence and what is missing, the recommendation (fight, partial refund or accept) with its confidence, and the letter. Edit the letter if you want. Pick the action, check the note, and approve. For a partial refund, enter the offer amount (more than 0 and less than the disputed amount).
+
+Nothing goes to PayPal until you approve. If PayPal no longer allows the action, the page says what is allowed now.
+
+Success: the timeline shows the action sent, and the dispute state is `ACTION_SENT`.
+
+## Step 8: Let the buyer respond, then check the result
+
+In the PayPal sandbox, as the buyer, open the dispute and accept the seller's offer (or decline it). PayPal reports the change by webhook and the app updates the dispute. Back on the dashboard, **Money protected** counts resolved disputes only, split into money kept and money refunded.
+
+Success: the Review page shows the dispute resolved with PayPal's outcome, and the dashboard totals have changed.
+
+The Dispute Analyst panel on the dashboard (wide screens only) can answer questions such as "Which disputes are due this week?". It is read only and cannot approve anything.
+
+## Owner appendix: API and debug paths
+
+These skip the browser. They use the `x-debug-token` header (set `DEBUG_TOKEN`), which is treated as the owner. Use them to sync, to inspect raw data or to script a run.
+
+### A1. Check the dispute through the API
 
 Your dispute can reach the server in two ways: the webhook (it can take a few minutes) or a manual sync. To sync right away:
 
@@ -50,7 +90,7 @@ curl -X POST -H "x-debug-token: <YOUR_DEBUG_TOKEN>" http://localhost:3000/api/di
 
 On the deployed service, replace `http://localhost:3000` with `https://dispute-copilot-zv53.onrender.com` in every command here.
 
-Then list the disputes:
+Then list the disputes (the header can be replaced by a session cookie, see the browser steps):
 
 ```
 curl -H "x-debug-token: <YOUR_DEBUG_TOKEN>" http://localhost:3000/api/disputes
@@ -68,9 +108,9 @@ The old script `npm run spike:disputes -w server` still prints the raw dispute J
 
 Warning: the raw JSON may contain sandbox buyer and seller names and email addresses. They are fake, but they still look like personal data. Redact them before pasting output into chat or Discord, or committing it.
 
-## Step 5b: Approve an action (fight, offer or accept)
+### A2. Approve an action (fight, offer or accept)
 
-Once `localState` is `READY_FOR_REVIEW`, read `latestAnalysis` (the AI's recommendation) and `allowedActions` (what PayPal currently lets you do). Then you decide. Nothing goes to PayPal until you call approve. Approval is API-only for now; the review screen comes in Phase 3.
+Once `localState` is `READY_FOR_REVIEW`, read `latestAnalysis` (the AI's recommendation) and `allowedActions` (what PayPal currently lets you do). Then you decide. Nothing goes to PayPal until you call approve. The Review page does the same thing in the browser.
 
 In PowerShell, quoting JSON on the command line breaks easily. Write the body to a file first, then send the file. Use `curl.exe` (with the `.exe`), because plain `curl` in PowerShell is a different command.
 
@@ -102,7 +142,7 @@ On the deployed service, the same call is `https://dispute-copilot-zv53.onrender
 
 Success: HTTP 202 with `{"actionId": ..., "state": "PENDING"}`. Fetch the dispute again after a few seconds: `localState` becomes `ACTION_SENT` and the action's `state` is `SENT`. If you get 409 `action not allowed now`, PayPal no longer offers that action; the response shows what is allowed.
 
-## Step 5c: Settle a sandbox dispute (demo only)
+### A3. Settle a sandbox dispute (demo only)
 
 In the sandbox you can make PayPal decide the case yourself, so the dispute reaches `RESOLVED`. PayPal only offers this for disputes under review in the claim stage, so a fresh inquiry usually answers 409 `not settleable yet` with a hint. Save as `settle.json` (`SELLER_FAVOR` or `BUYER_FAVOR`):
 
@@ -138,9 +178,9 @@ Earlier states you may briefly see: `NEW` (just received) and `ANALYZING` (the A
 - A later PayPal update re-analyzes a `NEEDS_MANUAL` dispute: the reason clears, and the failed action keeps its error in `actions`.
 - If a dispute is stuck in `ACTION_PENDING` for more than 15 minutes (the worker crashed on the last try), it needs a manual database fix. Contact the developer.
 
-## Step 6: Check the webhook arrived
+## Owner appendix A4: Check the webhook arrived
 
-PayPal cannot reach `localhost`, so locally you will not see webhooks unless you expose your machine with a tunnel; use the sync command from step 5 instead. On the deployed Render service, check soon after opening the dispute. Events are saved in the database. Locally they survive restarts. On Render the data lives in Render Postgres, so it survives the service sleeping and redeploys. Use the `curl` command from step 7 of the deploy section below; a plain browser visit returns 401 because the endpoint needs the `x-debug-token` header, and it returns 404 if `DEBUG_TOKEN` is not set on the service.
+PayPal cannot reach `localhost`, so locally you will not see webhooks unless you expose your machine with a tunnel; use the sync command from A1 instead. On the deployed Render service, check soon after opening the dispute. Events are saved in the database. Locally they survive restarts. On Render the data lives in Render Postgres, so it survives the service sleeping and redeploys. Use the `curl` command from step 7 of the deploy section below; a plain browser visit returns 401 because the endpoint needs the `x-debug-token` header, and it returns 404 if `DEBUG_TOKEN` is not set on the service.
 
 Success: the list contains a `CUSTOMER.DISPUTE.CREATED` event for your dispute ID. If the list is empty, look in Render → Logs for a line starting `webhook received: CUSTOMER.DISPUTE.CREATED` (it ends with the dispute ID).
 
@@ -148,7 +188,7 @@ Success: the list contains a `CUSTOMER.DISPUTE.CREATED` event for your dispute I
 
 - **401 / `invalid_client`**: the client ID or secret is wrong, or you mixed Live and Sandbox credentials. Re-copy both from the Sandbox tab of your REST app.
 - **"Config error: ... is required"**: a variable in `.env` is missing or blank. The message names it.
-- **Dispute not appearing**: run the sync command from step 5, or wait a few minutes. The sandbox can be slow. Confirm you used the same buyer account that paid.
+- **Dispute not appearing**: run the sync command from A1, or wait a few minutes. The sandbox can be slow. Confirm you used the same buyer account that paid.
 - **No `CUSTOMER.DISPUTE.CREATED` event**: check the webhook is subscribed to dispute events in the developer dashboard and points at the deployed server URL.
 - **Webhooks fail verification (400)**: expected until the real Webhook ID is set in `PAYPAL_WEBHOOK_ID` and the service is redeployed.
 - **Signature `FAILURE` even with the correct Webhook ID**: tell Claude; we may need to verify using the raw request body.
@@ -159,7 +199,7 @@ Success: the list contains a `CUSTOMER.DISPUTE.CREATED` event for your dispute I
 
 1. Push this repo to GitHub.
 2. In Render, choose **New → Blueprint** and pick the repo. Render reads `render.yaml` and proposes the `dispute-copilot` web service.
-3. In the Render dashboard, set `PUBLIC_BASE_URL` to your Render URL once you know it, add `GEMINI_API_KEY` and/or `GROQ_API_KEY`, and fill the four secret env vars: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` (use a placeholder for now) and `DEBUG_TOKEN` (any long random string you make up).
+3. In the Render dashboard, set `PUBLIC_BASE_URL` to your Render URL once you know it, add `GEMINI_API_KEY` and/or `GROQ_API_KEY`, and fill the secret env vars: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` (use a placeholder for now) and `DEBUG_TOKEN` (any long random string you make up). For logins add `OWNER_EMAIL`, `OWNER_PASSWORD_HASH`, `JUDGE_EMAIL`, `JUDGE_PASSWORD_HASH` and `SESSION_SECRET`. For the judge guide and the dashboard add the `VITE_*` keys (`VITE_JUDGE_EMAIL`, `VITE_JUDGE_PASSWORD`, `VITE_SANDBOX_BUYER_EMAIL`, `VITE_SANDBOX_BUYER_PASSWORD`, `VITE_AG_STUDIO_LICENSE_KEY`). `VITE_*` keys are read at build time, so changing one needs a redeploy.
 4. When the deploy finishes, copy the real `https://…onrender.com` URL from the Render dashboard (the service name may get a suffix) and use it wherever `<service>.onrender.com` appears below. Open `<that URL>/health`. Success: it shows `{"ok":true}`.
 5. Go to developer.paypal.com → Apps & Credentials (Sandbox) → your app → Webhooks → **Add webhook**. Use the URL `https://<service>.onrender.com/webhooks/paypal` and subscribe to `CUSTOMER.DISPUTE.CREATED`, `CUSTOMER.DISPUTE.UPDATED` and `CUSTOMER.DISPUTE.RESOLVED`.
 6. Copy the new **Webhook ID** into Render's `PAYPAL_WEBHOOK_ID` and redeploy.
@@ -169,4 +209,4 @@ Success: the list contains a `CUSTOMER.DISPUTE.CREATED` event for your dispute I
 curl -H "x-debug-token: <your DEBUG_TOKEN>" https://<service>.onrender.com/debug/events
 ```
 
-Note: free Render services sleep when idle. The first request after a while can take about a minute, and PayPal may retry the webhook in the meantime.
+Note: free Render services sleep when idle. The first request after a while can take up to a minute, and PayPal may retry the webhook in the meantime.

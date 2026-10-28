@@ -7,7 +7,7 @@ import { maskId } from '../log.js';
 import { PayPalError } from '../paypal/client.js';
 import { adjudicate, allowedActions, getDispute, type DisputeAction } from '../paypal/disputes.js';
 import { findOrderBundle } from '../store/repo.js';
-import { makeRequireDebugToken } from './webhooks.js';
+import { requireOwner, requireSameOrigin, requireSeller } from '../auth/guards.js';
 
 const ACTIONS: readonly DisputeAction[] = ['FIGHT', 'OFFER', 'ACCEPT'];
 const AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
@@ -41,9 +41,11 @@ export function actionRoutes(deps: AppDeps): Router {
   const { db, config, paypal } = deps;
   const logger = deps.logger ?? console;
   const router = Router();
-  const guard = makeRequireDebugToken(config);
+  const seller = requireSeller(deps);
+  const owner = requireOwner(deps);
+  const sameOrigin = requireSameOrigin(config);
 
-  router.post('/api/disputes/:id/approve', guard, async (req, res) => {
+  router.post('/api/disputes/:id/approve', seller, sameOrigin, async (req, res) => {
     const id = String(req.params.id);
     const row = (
       await db.query<DisputeRow>(
@@ -137,7 +139,7 @@ export function actionRoutes(deps: AppDeps): Router {
   });
 
   // Sandbox-only demo helper: the sandbox base-URL check in config guarantees this never reaches live PayPal.
-  router.post('/api/disputes/:id/sandbox/settle', guard, async (req, res) => {
+  router.post('/api/disputes/:id/sandbox/settle', owner, sameOrigin, async (req, res) => {
     const id = String(req.params.id);
     const row = (
       await db.query<{ order_id: string | null }>('select order_id from disputes where paypal_dispute_id = $1', [id])

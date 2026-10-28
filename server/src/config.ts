@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export type Account = { email: string; passwordHash: string };
+
 export interface Config {
   port: number;
   paypal: {
@@ -9,6 +11,10 @@ export interface Config {
     webhookId: string | null;
   };
   debugToken: string | null;
+  /** Reverse-proxy hops to trust for req.ip (Express `trust proxy`). */
+  trustProxy: number;
+  /** Seller-app logins. A missing account is disabled; no secret disables login entirely. */
+  auth: { owner: Account | null; judge: Account | null; sessionSecret: string | null };
   databaseUrl: string | null;
   pgliteDir: string;
   /** Run the job worker inside the web process (default: only when DATABASE_URL is unset). */
@@ -47,6 +53,15 @@ const EnvSchema = z.object({
   ),
   PAYPAL_WEBHOOK_ID: optional,
   DEBUG_TOKEN: optional,
+  TRUST_PROXY: z.preprocess(blankToUndefined, z.coerce.number().int().min(0).optional()),
+  OWNER_EMAIL: optional,
+  OWNER_PASSWORD_HASH: optional,
+  JUDGE_EMAIL: optional,
+  JUDGE_PASSWORD_HASH: optional,
+  SESSION_SECRET: z.preprocess(
+    blankToUndefined,
+    z.string().min(32, { error: 'SESSION_SECRET must be at least 32 characters' }).optional(),
+  ),
   DATABASE_URL: optional,
   RUN_WORKER_INLINE: z.preprocess(blankToUndefined, z.enum(['true', 'false']).optional()),
   PGLITE_DIR: z.preprocess(blankToUndefined, z.string().default('.data/pglite')),
@@ -58,7 +73,31 @@ const EnvSchema = z.object({
   // llama-3.3-70b-versatile was shut down by Groq on Aug 16, 2026.
   GROQ_MODEL: z.preprocess(blankToUndefined, z.string().default('openai/gpt-oss-120b')),
   LLM_TIMEOUT_MS: z.preprocess(blankToUndefined, z.coerce.number().int().min(5_000).max(90_000).default(45_000)),
+}).superRefine((e, ctx) => {
+  // An account needs both halves; name whichever is missing.
+  const HASH_RE = /^scrypt\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/;
+  for (const key of ['OWNER_PASSWORD_HASH', 'JUDGE_PASSWORD_HASH'] as const) {
+    const v = e[key];
+    if (v !== undefined && !HASH_RE.test(v)) {
+      ctx.addIssue({ code: 'custom', path: [key], message: `${key} must be a scrypt hash (npm run hash-password -w server -- 'pw')` });
+    }
+  }
+  if (e.OWNER_EMAIL !== undefined && e.JUDGE_EMAIL !== undefined && e.OWNER_EMAIL.trim().toLowerCase() === e.JUDGE_EMAIL.trim().toLowerCase()) {
+    ctx.addIssue({ code: 'custom', path: ['JUDGE_EMAIL'], message: 'JUDGE_EMAIL must differ from OWNER_EMAIL' });
+  }
+  for (const [email, hash] of [
+    ['OWNER_EMAIL', 'OWNER_PASSWORD_HASH'],
+    ['JUDGE_EMAIL', 'JUDGE_PASSWORD_HASH'],
+  ] as const) {
+    const hasEmail = e[email] !== undefined;
+    const hasHash = e[hash] !== undefined;
+    if (hasEmail && !hasHash) ctx.addIssue({ code: 'custom', path: [hash], message: `${hash} is required when ${email} is set` });
+    if (hasHash && !hasEmail) ctx.addIssue({ code: 'custom', path: [email], message: `${email} is required when ${hash} is set` });
+  }
 });
+
+const account = (email: string | undefined, passwordHash: string | undefined): Account | null =>
+  email !== undefined && passwordHash !== undefined ? { email, passwordHash } : null;
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
   const parsed = EnvSchema.safeParse(env);
@@ -78,6 +117,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
       webhookId: e.PAYPAL_WEBHOOK_ID ?? null,
     },
     debugToken: e.DEBUG_TOKEN ?? null,
+    trustProxy: e.TRUST_PROXY ?? (env.NODE_ENV === 'production' ? 1 : 0),
+    auth: {
+      owner: account(e.OWNER_EMAIL, e.OWNER_PASSWORD_HASH),
+      judge: account(e.JUDGE_EMAIL, e.JUDGE_PASSWORD_HASH),
+      sessionSecret: e.SESSION_SECRET ?? null,
+    },
     databaseUrl: e.DATABASE_URL ?? null,
     pgliteDir: e.PGLITE_DIR,
     runWorkerInline: e.RUN_WORKER_INLINE === undefined ? e.DATABASE_URL === undefined : e.RUN_WORKER_INLINE === 'true',

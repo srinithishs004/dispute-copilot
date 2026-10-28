@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'vitest';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDb, type Db } from '../../src/db/db.js';
@@ -19,7 +19,7 @@ afterEach(async () => {
 
 test('migrate applies migrations once and creates every table', async () => {
   db = await createDb({ databaseUrl: null, pgliteDir: null });
-  expect(await migrate(db)).toEqual(['001_init.sql', '002_phase2.sql']);
+  expect(await migrate(db)).toEqual(['001_init.sql', '002_phase2.sql', '003_phase3.sql']);
   const { rows } = await db.query<{ table_name: string }>(
     `select table_name from information_schema.tables where table_schema = 'public'`,
   );
@@ -63,4 +63,28 @@ test('createDb creates a missing nested pgliteDir', async () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('003 backfills original_amount from the PayPal transaction, else the current amount', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mig-'));
+  const src = new URL('../../src/db/migrations/', import.meta.url);
+  for (const f of ['001_init.sql', '002_phase2.sql']) {
+    writeFileSync(join(dir, f), readFileSync(new URL(f, src), 'utf8'));
+  }
+  db = await createDb({ databaseUrl: null, pgliteDir: null });
+  expect(await migrate(db, dir)).toEqual(['001_init.sql', '002_phase2.sql']);
+  const ins = (id: string, raw: unknown) =>
+    db!.query('insert into disputes (paypal_dispute_id, amount, raw) values ($1, 12.50, $2::jsonb)', [id, JSON.stringify(raw)]);
+  await ins('with-gross', { disputed_transactions: [{ gross_amount: { value: '25.00' } }] });
+  await ins('no-gross', {});
+  await ins('bad-gross', { disputed_transactions: [{ gross_amount: { value: 'n/a' } }] });
+  expect(await migrate(db)).toEqual(['003_phase3.sql']);
+  const { rows } = await db.query<{ id: string; o: string }>(
+    'select paypal_dispute_id id, original_amount::text o from disputes order by 1',
+  );
+  expect(Object.fromEntries(rows.map((r) => [r.id, r.o]))).toEqual({
+    'with-gross': '25.00',
+    'no-gross': '12.50',
+    'bad-gross': '12.50',
+  });
 });

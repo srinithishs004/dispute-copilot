@@ -1,4 +1,5 @@
-# Phase 1: one web service (webhooks, store, API and the job worker running inline)
+# One web service: webhooks, demo store, seller API, the built web app (dashboard and Review
+# page) and the job worker running inline.
 # plus a small paid Postgres so data survives the free web service sleeping.
 # Postgres is paid from Render credits (Basic-256mb, 1 GB).
 services:
@@ -23,6 +24,8 @@ services:
       # With DATABASE_URL set the worker defaults to off; there is no separate worker yet.
       - key: RUN_WORKER_INLINE
         value: "true"
+      # Must be this site's URL (no trailing slash). Used for the PayPal return URLs and the
+      # Origin check on approve.
       - key: PUBLIC_BASE_URL
         sync: false
       - key: PAYPAL_CLIENT_ID
@@ -33,9 +36,35 @@ services:
         sync: false
       - key: DEBUG_TOKEN
         sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: OWNER_PASSWORD_HASH
+        sync: false
+      - key: JUDGE_EMAIL
+        sync: false
+      - key: JUDGE_PASSWORD_HASH
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: TRUST_PROXY
+        value: "1"
       - key: GEMINI_API_KEY
         sync: false
       - key: GROQ_API_KEY
+        sync: false
+      # VITE_* keys are read at build time, not at run time: they are baked into the web app by
+      # `npm run build`, so changing one needs a redeploy (a restart is not enough).
+      # These four fill the judge guide page (public, judge-only sandbox accounts).
+      - key: VITE_JUDGE_EMAIL
+        sync: false
+      - key: VITE_JUDGE_PASSWORD
+        sync: false
+      - key: VITE_SANDBOX_BUYER_EMAIL
+        sync: false
+      - key: VITE_SANDBOX_BUYER_PASSWORD
+        sync: false
+      # AG Studio licence key: a public client key baked into the web build. Unset shows the trial watermark.
+      - key: VITE_AG_STUDIO_LICENSE_KEY
         sync: false
 
 databases:

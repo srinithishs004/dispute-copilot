@@ -14,10 +14,12 @@ export interface AnalyzeDisputeDeps {
   db: Db;
   llm: Llm;
   storeName: string;
+  /** Receives `ai fallback: <codes>` only; never prompts, letters or provider bodies. */
+  logger?: Pick<Console, 'warn'>;
 }
 
 export function analyzeDisputeJob(deps: AnalyzeDisputeDeps): JobHandler {
-  const { db, llm, storeName } = deps;
+  const { db, llm, storeName, logger } = deps;
   return async (job) => {
     const disputeId = (job.payload as { disputeId?: unknown } | null)?.disputeId;
     if (typeof disputeId !== 'string' || !disputeId) throw new Error('analyzeDispute: payload.disputeId missing');
@@ -38,14 +40,16 @@ export function analyzeDisputeJob(deps: AnalyzeDisputeDeps): JobHandler {
       }
 
       const pack = buildEvidencePack(dispute.raw, bundle);
-      const { advice, model: adviceModel } = await advise(llm, pack, dispute.raw);
-      const { draft, model: letterModel } = await draftLetter(
+      const { advice, model: adviceModel, fallbackReasons: adviceFallback } = await advise(llm, pack, dispute.raw);
+      const { draft, model: letterModel, fallbackReasons: letterFallback } = await draftLetter(
         llm,
         pack,
         advice.recommendation,
         [disputeId, dispute.order_id],
         { storeName, ...(advice.recommendation === 'OFFER' && advice.suggestedOffer ? { offerAmount: advice.suggestedOffer } : {}) },
       );
+      const fallback = [...new Set([...adviceFallback, ...letterFallback])];
+      if (fallback.length > 0) logger?.warn(`ai fallback: ${fallback.join(', ')}`);
       const modelUsed = adviceModel === letterModel ? adviceModel : `${adviceModel}+${letterModel}`;
       await db.transaction(async (tx) => {
         await tx.query(

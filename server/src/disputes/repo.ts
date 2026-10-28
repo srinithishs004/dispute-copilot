@@ -21,18 +21,19 @@ export const ADVANCED_STATES: readonly LocalState[] = [
 
 /**
  * Inserts or refreshes the PayPal-owned columns. `local_state` is only set on insert (default NEW),
- * so a re-sync never moves it. `raw` keeps the whole payload, including allowed_response_options.
+ * so a re-sync never moves it. `original_amount` is also insert-only: PayPal lowers `amount` after an accepted offer. `raw` keeps the whole payload, including allowed_response_options.
  */
 export async function upsertDispute(db: Db, detail: DisputeDetail, orderId: string | null): Promise<void> {
   await db.query(
-    `insert into disputes (paypal_dispute_id, order_id, reason, status, stage, amount, currency, response_due_at, raw)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+    `insert into disputes (paypal_dispute_id, order_id, reason, status, stage, amount, original_amount, currency, response_due_at, raw)
+     values ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9::jsonb)
      on conflict (paypal_dispute_id) do update set
        order_id = coalesce(excluded.order_id, disputes.order_id),
        reason = excluded.reason,
        status = excluded.status,
        stage = excluded.stage,
        amount = excluded.amount,
+       original_amount = coalesce(disputes.original_amount, excluded.amount),
        currency = excluded.currency,
        response_due_at = excluded.response_due_at,
        raw = excluded.raw,

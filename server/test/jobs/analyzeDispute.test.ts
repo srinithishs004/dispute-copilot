@@ -72,6 +72,29 @@ describe('analyzeDisputeJob', () => {
     expect(a[0]).toMatchObject({ recommendation: 'FIGHT', letter_draft: letter, model_used: 'fake:m' });
   });
 
+  it('logs fallback reason codes only, once, when a provider fell back', async () => {
+    const db = await setup();
+    const fallbackLlm: Llm = {
+      async generateJson(p, schema) {
+        const isAdvisor = p.system.includes('recommendation');
+        const data = schema.parse(isAdvisor ? advice() : { letter, citedFactIds: ['shipment.0.tracking'] });
+        return { data, model: 'groq:m', fallbackReasons: isAdvisor ? ['gemini:http_400'] : ['gemini:http_400', 'x:y'] };
+      },
+    };
+    const warns: string[] = [];
+    await analyzeDisputeJob({ db, llm: fallbackLlm, storeName: STORE, logger: { warn: (m: string) => warns.push(m) } })(job(1));
+    expect(warns).toEqual(['ai fallback: gemini:http_400, x:y']);
+    await db.close();
+  });
+
+  it('logs nothing when there was no fallback', async () => {
+    const db = await setup();
+    const warns: string[] = [];
+    await analyzeDisputeJob({ db, llm: okLlm, storeName: STORE, logger: { warn: (m: string) => warns.push(m) } })(job(1));
+    expect(warns).toEqual([]);
+    await db.close();
+  });
+
   it('rethrows LlmUnavailableError on attempt 1 and leaves state unchanged', async () => {
     const db = await setup();
     await expect(analyzeDisputeJob({ db, llm: downLlm, storeName: STORE })(job(1))).rejects.toBeInstanceOf(LlmUnavailableError);

@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { loadConfig } from '../src/config.js';
 
 test('loads required values and defaults', () => {
@@ -88,4 +88,61 @@ test('storeName defaults and can be overridden', () => {
   expect(loadConfig(base).storeName).toBe('Dispute Copilot Demo Store');
   expect(loadConfig({ ...base, STORE_NAME: '' }).storeName).toBe('Dispute Copilot Demo Store');
   expect(loadConfig({ ...base, STORE_NAME: 'Acme' }).storeName).toBe('Acme');
+});
+
+describe('auth config', () => {
+  const base = { PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's' };
+
+  test('defaults to no accounts and no secret', () => {
+    expect(loadConfig(base).auth).toEqual({ owner: null, judge: null, sessionSecret: null });
+  });
+
+  test('reads accounts and secret', () => {
+    const c = loadConfig({
+      ...base,
+      OWNER_EMAIL: 'o@x.test',
+      OWNER_PASSWORD_HASH: 'scrypt$AAAA$BBBB',
+      JUDGE_EMAIL: '',
+      JUDGE_PASSWORD_HASH: '',
+      SESSION_SECRET: 'y'.repeat(32),
+    });
+    expect(c.auth.owner).toEqual({ email: 'o@x.test', passwordHash: 'scrypt$AAAA$BBBB' });
+    expect(c.auth.judge).toBeNull();
+    expect(c.auth.sessionSecret).toBe('y'.repeat(32));
+  });
+
+  test('rejects a short SESSION_SECRET naming it', () => {
+    expect(() => loadConfig({ ...base, SESSION_SECRET: 'short' })).toThrow(/SESSION_SECRET/);
+  });
+
+  test('names the missing half of an account pair', () => {
+    expect(() => loadConfig({ ...base, OWNER_EMAIL: 'o@x.test' })).toThrow(/OWNER_PASSWORD_HASH/);
+    expect(() => loadConfig({ ...base, JUDGE_PASSWORD_HASH: 'scrypt$AAAA$BBBB' })).toThrow(/JUDGE_EMAIL/);
+  });
+});
+
+describe('hardened auth config', () => {
+  const base = { PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's' };
+  const H = 'scrypt$AAAA$BBBB';
+
+  test('validates hash format naming the key', () => {
+    expect(() => loadConfig({ ...base, OWNER_EMAIL: 'o@x.test', OWNER_PASSWORD_HASH: 'plaintext' })).toThrow(/OWNER_PASSWORD_HASH/);
+    expect(() => loadConfig({ ...base, JUDGE_EMAIL: 'j@x.test', JUDGE_PASSWORD_HASH: 'bcrypt$a$b' })).toThrow(/JUDGE_PASSWORD_HASH/);
+    expect(loadConfig({ ...base, OWNER_EMAIL: 'o@x.test', OWNER_PASSWORD_HASH: H }).auth.owner).not.toBeNull();
+  });
+
+  test('rejects identical owner and judge emails', () => {
+    expect(() =>
+      loadConfig({ ...base, OWNER_EMAIL: 'a@x.test', OWNER_PASSWORD_HASH: H, JUDGE_EMAIL: 'A@x.test', JUDGE_PASSWORD_HASH: H }),
+    ).toThrow(/JUDGE_EMAIL/);
+  });
+
+  test('TRUST_PROXY defaults by NODE_ENV and parses an integer', () => {
+    expect(loadConfig(base).trustProxy).toBe(0);
+    expect(loadConfig({ ...base, NODE_ENV: 'production' }).trustProxy).toBe(1);
+    expect(loadConfig({ ...base, NODE_ENV: 'production', TRUST_PROXY: '2' }).trustProxy).toBe(2);
+    expect(loadConfig({ ...base, TRUST_PROXY: '' }).trustProxy).toBe(0);
+    expect(() => loadConfig({ ...base, TRUST_PROXY: '-1' })).toThrow(/TRUST_PROXY/);
+    expect(() => loadConfig({ ...base, TRUST_PROXY: 'true' })).toThrow(/TRUST_PROXY/);
+  });
 });
