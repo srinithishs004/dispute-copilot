@@ -77,7 +77,7 @@ describe('createLlm', () => {
   test('Gemini invalid twice falls to Groq', async () => {
     const f = fake([json(200, gemini('nope')), json(200, gemini('nope')), json(200, groq('{"answer":"g"}'))]);
     const r = await mk(f.fetchImpl).generateJson(prompt, schema);
-    expect(r).toEqual({ data: { answer: 'g' }, model: 'groq:qm' });
+    expect(r).toEqual({ data: { answer: 'g' }, model: 'groq:qm', fallbackReasons: ['gemini:invalid_output'] });
     expect(f.calls.map((c) => c.url.includes('groq'))).toEqual([false, false, true]);
   });
 
@@ -163,5 +163,46 @@ describe('LlmUnavailableError', () => {
     const e = new LlmUnavailableError(['gemini:http_404', 'groq:no_key']);
     expect(e.reasons).toEqual(['gemini:http_404', 'groq:no_key']);
     expect(e.logDetail).toBe('gemini:http_404, groq:no_key');
+  });
+
+  test('skips a thought part and reads the first non-thought text part', async () => {
+    const body = {
+      candidates: [
+        {
+          content: {
+            parts: [
+              { text: 'Let me think about the JSON.', thought: true },
+              { text: '{"answer":"after thinking"}', thoughtSignature: 'sig' },
+            ],
+          },
+        },
+      ],
+    };
+    const f = fake([json(200, body)]);
+    const r = await mk(f.fetchImpl).generateJson(prompt, schema);
+    expect(r).toEqual({ data: { answer: 'after thinking' }, model: 'gemini:gm' });
+    expect(f.calls).toHaveLength(1);
+  });
+
+  test('skips parts without text (e.g. a signature-only part)', async () => {
+    const body = { candidates: [{ content: { parts: [{ thoughtSignature: 'sig' }, { text: '{"answer":"ok"}' }] } }] };
+    const f = fake([json(200, body)]);
+    const r = await mk(f.fetchImpl).generateJson(prompt, schema);
+    expect(r.data.answer).toBe('ok');
+  });
+
+  test('only thought parts counts as no text', async () => {
+    const body = { candidates: [{ content: { parts: [{ text: 'thinking', thought: true }] } }] };
+    const f = fake([json(200, body), json(200, body), json(200, groq('{"answer":"g"}'))]);
+    const r = await mk(f.fetchImpl).generateJson(prompt, schema);
+    expect(r.model).toBe('groq:qm');
+  });
+
+  test('a successful fallback reports the reason codes; a first-try success has none', async () => {
+    const f = fake([json(400, {}), json(200, groq('{"answer":"g"}'))]);
+    const r = await mk(f.fetchImpl).generateJson(prompt, schema);
+    expect(r.fallbackReasons).toEqual(['gemini:http_400']);
+    const f2 = fake([json(200, gemini('{"answer":"hi"}'))]);
+    expect((await mk(f2.fetchImpl).generateJson(prompt, schema)).fallbackReasons).toBeUndefined();
   });
 });

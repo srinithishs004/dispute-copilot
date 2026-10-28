@@ -14,7 +14,7 @@ export class LlmUnavailableError extends Error {
 export type LlmPrompt = { system: string; user: string };
 
 export type Llm = {
-  generateJson<T>(prompt: LlmPrompt, schema: z.ZodType<T>): Promise<{ data: T; model: string }>;
+  generateJson<T>(prompt: LlmPrompt, schema: z.ZodType<T>): Promise<{ data: T; model: string; fallbackReasons?: string[] }>;
 };
 
 export interface LlmOptions {
@@ -94,7 +94,11 @@ export function createLlm(opts: LlmOptions): Llm {
         generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
       },
     );
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text as unknown;
+    // Thinking models can put a thought summary first: take the first part that is real answer text.
+    const parts: unknown = data?.candidates?.[0]?.content?.parts;
+    if (!Array.isArray(parts)) return undefined;
+    const part = parts.find((p) => typeof p?.text === 'string' && p.thought !== true);
+    return part?.text as unknown;
   };
 
   const callGroq = async (apiKey: string, model: string, system: string, user: string) => {
@@ -127,7 +131,7 @@ export function createLlm(opts: LlmOptions): Llm {
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
             const text = await callGemini(g.apiKey, g.model, prompt.system, user);
-            return { data: parseOutput(text, schema), model: `gemini:${g.model}` };
+            return { data: parseOutput(text, schema), model: `gemini:${g.model}`, ...(reasons.length > 0 ? { fallbackReasons: reasons } : {}) };
           } catch (e) {
             if (e instanceof TransportError) {
               reasons.push(`gemini:${e.code}`);
@@ -150,7 +154,7 @@ export function createLlm(opts: LlmOptions): Llm {
       } else {
         try {
           const text = await callGroq(q.apiKey, q.model, prompt.system, prompt.user);
-          return { data: parseOutput(text, schema), model: `groq:${q.model}` };
+          return { data: parseOutput(text, schema), model: `groq:${q.model}`, ...(reasons.length > 0 ? { fallbackReasons: reasons } : {}) };
         } catch (e) {
           if (e instanceof TransportError) reasons.push(`groq:${e.code}`);
           else if (e instanceof InvalidOutputError) reasons.push('groq:invalid_output');

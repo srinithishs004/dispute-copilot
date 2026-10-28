@@ -35,14 +35,34 @@ function makeTurnLimiter(now: () => number) {
   };
 }
 
+const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null;
+const isStr = (x: unknown): x is string => typeof x === 'string';
+
+/** A content part: an object whose `text` and `refusal`, when present, are strings. */
+const isPart = (p: unknown): boolean => isObj(p) && isStr(p.type) && (p.text === undefined || isStr(p.text)) && (p.refusal === undefined || isStr(p.refusal));
+
+/** One conversation item, checked by type so the mapper never meets a wrong-typed field. */
+function isItem(i: unknown): boolean {
+  if (!isObj(i) || !isStr(i.type)) return false;
+  switch (i.type) {
+    case 'message':
+      return isStr(i.content) || (Array.isArray(i.content) && i.content.every(isPart));
+    case 'function_call':
+      return isStr(i.callId) && isStr(i.name) && isStr(i.arguments);
+    case 'function_call_output':
+      return isStr(i.callId) && isStr(i.output);
+    default:
+      return true; // reasoning and unknown items are never sent to a provider
+  }
+}
+
 const isTurn = (b: unknown): b is AgLlmRequest => {
-  if (typeof b !== 'object' || b === null) return false;
-  const r = b as Record<string, unknown>;
+  if (!isObj(b)) return false;
   return (
-    Array.isArray(r.input) &&
-    r.input.every((i) => typeof i === 'object' && i !== null && typeof (i as { type?: unknown }).type === 'string') &&
-    (r.instructions === undefined || typeof r.instructions === 'string') &&
-    (r.tools === undefined || Array.isArray(r.tools))
+    Array.isArray(b.input) &&
+    b.input.every(isItem) &&
+    (b.instructions === undefined || isStr(b.instructions)) &&
+    (b.tools === undefined || Array.isArray(b.tools))
   );
 };
 

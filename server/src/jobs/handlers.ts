@@ -13,10 +13,11 @@ export interface HandlerDeps {
   llm: Llm;
   now: () => Date;
   storeName: string;
+  logger?: Pick<Console, 'warn'>;
 }
 
 export function buildHandlers(deps: HandlerDeps): Record<string, JobHandler> {
-  const analyze = analyzeDisputeJob({ db: deps.db, llm: deps.llm, storeName: deps.storeName });
+  const analyze = analyzeDisputeJob({ db: deps.db, llm: deps.llm, storeName: deps.storeName, ...(deps.logger ? { logger: deps.logger } : {}) });
   return {
     processDispute: processDispute({ db: deps.db, paypal: deps.paypal, now: deps.now }),
     analyzeDispute: analyze,

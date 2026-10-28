@@ -9,6 +9,8 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { disputeRoutes } from './routes/disputes.js';
 import { storeRoutes } from './routes/store.js';
 import { webhookRoutes } from './routes/webhooks.js';
+import { securityHeaders } from './spa/securityHeaders.js';
+import { serveWeb } from './spa/static.js';
 
 export interface AppDeps {
   config: Config;
@@ -19,6 +21,8 @@ export interface AppDeps {
   now?: () => number;
   /** fetch for request-time LLM calls (the agent proxy); tests inject a fake. */
   llmFetch?: typeof fetch;
+  /** Built web app (index.html and assets). Missing or unset: the server is API-only. */
+  webDistDir?: string;
 }
 
 // Reserved for future webhook signature debugging; not read anywhere yet.
@@ -35,6 +39,7 @@ export function createApp(deps: AppDeps): express.Express {
   const app = express();
   const logger = deps.logger ?? console;
   app.set('trust proxy', deps.config.trustProxy);
+  app.use(securityHeaders());
   // Before the global JSON parser: agent turns carry up to 512 KB and parse after auth.
   app.use(agentRoutes(deps));
   app.use(
@@ -54,6 +59,10 @@ export function createApp(deps: AppDeps): express.Express {
   app.use(actionRoutes(deps));
   app.use(dashboardRoutes(deps));
   app.use(storeRoutes(deps));
+  if (deps.webDistDir) serveWeb(app, { distDir: deps.webDistDir, logger });
+  app.use((_req, res) => {
+    res.status(404).json({ error: 'not found' });
+  });
   // Final error handler: JSON only, and never log the request body or the stack.
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const e = (typeof err === 'object' && err !== null ? err : {}) as HttpError;
@@ -62,6 +71,10 @@ export function createApp(deps: AppDeps): express.Express {
     logger.warn(`request error: type=${type} status=${status}`);
     if (type === 'entity.parse.failed') {
       res.status(400).json({ error: 'invalid JSON' });
+      return;
+    }
+    if (type === 'entity.too.large') {
+      res.status(413).json({ error: 'request too large' });
       return;
     }
     res.status(status).json({ error: 'internal error' });

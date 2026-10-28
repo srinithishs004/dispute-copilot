@@ -119,6 +119,38 @@ describe('POST /api/agent/turn', () => {
     expect(okRes.status).toBe(200);
     const tooBig = await request(app).post('/api/agent/turn').set('x-debug-token', 'dbg').send(big(600_000));
     expect(tooBig.status).toBe(413);
+    expect(tooBig.body).toEqual({ error: 'request too large' });
+  });
+
+  it.each([
+    ['non-array content', { type: 'message', role: 'user', content: { text: 'hi' } }],
+    ['numeric content', { type: 'message', role: 'user', content: 5 }],
+    ['part without string text', { type: 'message', role: 'user', content: [{ type: 'text', text: 5 }] }],
+    ['null part', { type: 'message', role: 'user', content: [null] }],
+    ['function_call without callId', { type: 'function_call', name: 't', arguments: '{}' }],
+    ['function_call with non-string arguments', { type: 'function_call', callId: 'c', name: 't', arguments: {} }],
+    ['function_call without name', { type: 'function_call', callId: 'c', arguments: '{}' }],
+    ['function_call_output without callId', { type: 'function_call_output', output: 'x' }],
+    ['function_call_output with non-string output', { type: 'function_call_output', callId: 'c', output: 1 }],
+  ])('400 for a malformed item (%s), never a provider call', async (_n, item) => {
+    const { app, calls, cookie } = setup();
+    const res = await post(app, cookie('owner'), { ...turn, input: [item] });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'invalid request' });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('accepts string content, text parts and tool items', async () => {
+    const { app, cookie } = setup();
+    const input = [
+      { type: 'message', role: 'user', content: 'plain string' },
+      { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'ok' }, { type: 'refusal', refusal: 'no' }] },
+      { type: 'function_call', callId: 'c', name: 't', arguments: '{}' },
+      { type: 'function_call_output', callId: 'c', output: 'done' },
+      { type: 'reasoning', summary: [] },
+    ];
+    const res = await post(app, cookie('owner'), { ...turn, input });
+    expect(res.status).toBe(200);
   });
 
   it('400 for a body without an input array', async () => {

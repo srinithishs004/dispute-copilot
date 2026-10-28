@@ -110,6 +110,27 @@ const textOf = (parts: Array<{ type: string; text?: string; refusal?: string }>)
     .filter((t) => t !== '')
     .join('\n');
 
+/**
+ * Redact emails from a tool payload without breaking its JSON: parse, redact every string
+ * (keys stay as they are), stringify. Text redaction would eat an escaping backslash that
+ * touches an address. Anything that is not JSON gets plain text redaction.
+ */
+function redactJsonText(s: string): string {
+  let v: unknown;
+  try {
+    v = JSON.parse(s);
+  } catch {
+    return redactEmails(s);
+  }
+  const walk = (x: unknown): unknown => {
+    if (typeof x === 'string') return redactEmails(x);
+    if (Array.isArray(x)) return x.map(walk);
+    if (typeof x === 'object' && x !== null) return Object.fromEntries(Object.entries(x).map(([k, val]) => [k, walk(val)]));
+    return x;
+  };
+  return JSON.stringify(walk(v));
+}
+
 type MapOpts = { provider?: Provider; signatures?: SignatureStore };
 
 /** Studio conversation -> chat messages. Emails are redacted from every text that is sent. */
@@ -119,7 +140,7 @@ export function toChatMessages(req: AgLlmRequest, ids: IdMap, opts: MapOpts = {}
   for (const item of req.input) {
     switch (item.type) {
       case 'message': {
-        const content = redactEmails(textOf(item.content as AgInputContent[]));
+        const content = redactEmails(typeof item.content === 'string' ? item.content : textOf(item.content as AgInputContent[]));
         if (item.role === 'assistant') out.push({ role: 'assistant', content });
         else out.push({ role: item.role === 'system' ? 'system' : 'user', content });
         break;
@@ -128,7 +149,7 @@ export function toChatMessages(req: AgLlmRequest, ids: IdMap, opts: MapOpts = {}
         const call: ChatToolCall = {
           id: ids.toShort(item.callId),
           type: 'function',
-          function: { name: item.name, arguments: redactEmails(item.arguments || '{}') },
+          function: { name: item.name, arguments: redactJsonText(item.arguments || '{}') },
         };
         if (opts.provider === 'gemini') {
           call.extra_content = { google: { thought_signature: opts.signatures?.get(item.callId) ?? SKIP_SIGNATURE } };
@@ -140,7 +161,7 @@ export function toChatMessages(req: AgLlmRequest, ids: IdMap, opts: MapOpts = {}
         break;
       }
       case 'function_call_output':
-        out.push({ role: 'tool', tool_call_id: ids.toShort(item.callId), content: redactEmails(item.output) });
+        out.push({ role: 'tool', tool_call_id: ids.toShort(item.callId), content: redactJsonText(item.output) });
         break;
       default:
         break; // reasoning items are not sent back

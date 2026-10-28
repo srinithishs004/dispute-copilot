@@ -181,3 +181,63 @@ describe('draftLetter offer amount token and digit sources', () => {
     expect(out.draft.letter).toContain('100000.00');
   });
 });
+
+describe('draftLetter buyer claims', () => {
+  const claim =
+    'Dear PayPal dispute team, the order was delivered on Sep 20, 2026, which matches the amount you requested. We respectfully ask that the dispute be resolved in our favour. Thank you.';
+  const withBuyer: EvidencePack = {
+    ...pack,
+    facts: [...pack.facts, { id: 'dispute.buyer_message.0', label: 'Buyer message in dispute', value: 'I want a full refund' }],
+  };
+
+  it('states the rule in the system prompt', async () => {
+    const calls: { system?: string }[] = [];
+    const llm: Llm = {
+      async generateJson(prompt, schema) {
+        calls.push({ system: prompt.system });
+        return { data: schema.parse({ letter: good, citedFactIds: ['order.id'] }), model: 'm' };
+      },
+    };
+    await draftLetter(llm, pack, 'FIGHT', [], opts);
+    expect(calls[0]!.system).toContain(
+      'Never claim what the buyer asked for, requested, agreed to or said unless a listed fact states it.',
+    );
+  });
+
+  it('rejects a claim about the buyer request when no buyer message fact is cited', async () => {
+    await expect(
+      draftLetter(fakeLlm({ letter: claim, citedFactIds: ['order.id'] }), withBuyer, 'FIGHT', [], opts),
+    ).rejects.toThrow('letter rejected: unsupported claim about the buyer');
+  });
+
+  it.each([
+    'You agreed to the terms of sale when you paid for the order delivered on Sep 20, 2026 as shown in our records.',
+    'Regarding your request, the order was delivered on Sep 20, 2026 with the tracking number we recorded in our facts.',
+    'Regarding your requested change, the order was delivered on Sep 20, 2026 with the tracking number we recorded.',
+  ])('rejects "%s"', async (letter) => {
+    await expect(
+      draftLetter(fakeLlm({ letter, citedFactIds: ['order.id'] }), withBuyer, 'ACCEPT', [], opts),
+    ).rejects.toBeInstanceOf(LetterRejectedError);
+  });
+
+  it('allows the claim when a dispute buyer message fact is cited', async () => {
+    const out = await draftLetter(
+      fakeLlm({ letter: claim, citedFactIds: ['order.id', 'dispute.buyer_message.0'] }),
+      withBuyer,
+      'FIGHT',
+      [],
+      opts,
+    );
+    expect(out.draft.letter).toContain('you requested');
+  });
+
+  it('allows the claim when a message fact is cited', async () => {
+    const withMsg: EvidencePack = { ...pack, facts: [...pack.facts, { id: 'message.0', label: 'Store message from buyer', value: 'hi' }] };
+    const out = await draftLetter(fakeLlm({ letter: claim, citedFactIds: ['message.0'] }), withMsg, 'FIGHT', [], opts);
+    expect(out.draft.citedFactIds).toEqual(['message.0']);
+  });
+
+  it('does not touch letters without such a claim', async () => {
+    await expect(draftLetter(fakeLlm({ letter: good, citedFactIds: ['order.id'] }), pack, 'FIGHT', [], opts)).resolves.toBeTruthy();
+  });
+});

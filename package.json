@@ -4,7 +4,7 @@
   "workspaces": ["server"],
   "scripts": {
     "test": "npm test -w server",
-    "build": "npm run build -w server",
+    "build": "npm run build -w server && node scripts/copy-web.mjs",
     "dev": "npm run dev -w server",
     "start": "npm run start -w server"
   }

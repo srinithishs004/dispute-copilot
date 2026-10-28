@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
 import { createLlm } from './ai/llm.js';
 import { loadConfig } from './config.js';
@@ -23,7 +24,7 @@ async function main(): Promise<void> {
   });
   const llm = createLlm({ ...config.llm });
 
-  const server = createApp({ config, paypal, db }).listen(config.port, () => {
+  const server = createApp({ config, paypal, db, webDistDir: fileURLToPath(new URL('./web/', import.meta.url)) }).listen(config.port, () => {
     console.log(`Dispute Copilot listening on port ${config.port}`);
   });
   // Listen failures (e.g. EADDRINUSE) arrive as events, not rejections.
@@ -39,7 +40,7 @@ async function main(): Promise<void> {
   if (config.runWorkerInline) {
     workerLoop = startWorker({
       db,
-      handlers: buildHandlers({ db, paypal, llm, now: () => new Date(), storeName: config.storeName }),
+      handlers: buildHandlers({ db, paypal, llm, now: () => new Date(), storeName: config.storeName, logger: console }),
       now: () => new Date(),
       logger: console,
       signal: abort.signal,

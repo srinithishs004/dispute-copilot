@@ -104,6 +104,50 @@ describe('toChatMessages', () => {
   });
 });
 
+describe('JSON-safe redaction of tool traffic', () => {
+  const call = (args: string, output: string): AgLlmRequest => ({
+    responseFormat: { type: 'text' },
+    input: [
+      { id: 'f', kind: 'output', type: 'function_call', callId: 'abc', name: 't', arguments: args, status: 'completed' },
+      { type: 'function_call_output', callId: 'abc', output, status: 'completed' },
+    ],
+  });
+
+  test('escaped quotes around an email keep arguments and output valid JSON', () => {
+    const tricky = '{"r":"say \\"bob@x.com\\" now"}';
+    const msgs = toChatMessages(call(tricky, tricky), makeIdMap());
+    const a = (msgs[0] as any).tool_calls[0].function.arguments as string;
+    const o = (msgs[1] as any).content as string;
+    for (const s of [a, o]) {
+      expect(() => JSON.parse(s)).not.toThrow();
+      expect(s).not.toContain('bob@x.com');
+      expect(JSON.parse(s).r).toBe('say "[email]" now');
+    }
+  });
+
+  test('redacts nested values and keys stay intact', () => {
+    const out = '{"rows":[{"email":"a.b@shop.test","n":3,"ok":true,"x":null}],"owner":"c@d.org"}';
+    const msgs = toChatMessages(call('{}', out), makeIdMap());
+    expect(JSON.parse((msgs[1] as any).content)).toEqual({ rows: [{ email: '[email]', n: 3, ok: true, x: null }], owner: '[email]' });
+  });
+
+  test('non-JSON text falls back to text redaction', () => {
+    const msgs = toChatMessages(call('not json bob@x.com', 'plain bob@x.com'), makeIdMap());
+    expect((msgs[0] as any).tool_calls[0].function.arguments).toBe('not json [email]');
+    expect((msgs[1] as any).content).toBe('plain [email]');
+  });
+});
+
+describe('string message content', () => {
+  test('a plain string content is sent as text with emails redacted', () => {
+    const msgs = toChatMessages(
+      { responseFormat: { type: 'text' }, input: [{ type: 'message', role: 'user', content: 'hi bob@x.com' as any }] },
+      makeIdMap(),
+    );
+    expect(msgs).toEqual([{ role: 'user', content: 'hi [email]' }]);
+  });
+});
+
 describe('toChatRequest', () => {
   test('tools drop kind; temperature 0.2; no tool_choice when unset', () => {
     const body = toChatRequest(req, { ids: makeIdMap(), provider: 'groq', model: 'qm' });
