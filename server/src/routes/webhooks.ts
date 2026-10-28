@@ -1,7 +1,6 @@
-import { timingSafeEqual } from 'node:crypto';
-import { Router, type NextFunction, type Request, type Response } from 'express';
+import { Router } from 'express';
 import type { AppDeps } from '../app.js';
-import type { Config } from '../config.js';
+import { requireOwner, requireSameOrigin } from '../auth/guards.js';
 import { enqueue } from '../jobs/queue.js';
 import { maskId } from '../log.js';
 import { listDisputes } from '../paypal/disputes.js';
@@ -9,31 +8,8 @@ import { PayPalError } from '../paypal/client.js';
 import { MissingHeadersError, verifyWebhook } from '../paypal/webhooks.js';
 import { disputeIdFromEvent } from '../webhooks/disputeEvent.js';
 
-function tokenMatches(provided: string | undefined, expected: string): boolean {
-  if (provided === undefined) return false;
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 function str(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
-}
-
-/** Debug-token guard: 404 when no token is configured, 401 on mismatch. */
-export function makeRequireDebugToken(config: Pick<Config, 'debugToken'>) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const expected = config.debugToken;
-    if (expected === null) {
-      res.status(404).json({ error: 'not found' });
-      return;
-    }
-    if (!tokenMatches(str(req.headers['x-debug-token']), expected)) {
-      res.status(401).json({ error: 'unauthorized' });
-      return;
-    }
-    next();
-  };
 }
 
 export function webhookRoutes(deps: AppDeps): Router {
@@ -41,7 +17,8 @@ export function webhookRoutes(deps: AppDeps): Router {
   const logger = deps.logger ?? console;
   const router = Router();
 
-  const requireDebugToken = makeRequireDebugToken(config);
+  const owner = requireOwner(deps);
+  const sameOrigin = requireSameOrigin(config);
 
   router.post('/webhooks/paypal', async (req, res) => {
     const webhookId = config.paypal.webhookId;
@@ -109,7 +86,7 @@ export function webhookRoutes(deps: AppDeps): Router {
     res.status(200).json({ received: true });
   });
 
-  router.get('/debug/events', requireDebugToken, async (_req, res) => {
+  router.get('/debug/events', owner, async (_req, res) => {
     const rows = await db.query<{
       paypal_event_id: string;
       event_type: string;
@@ -132,7 +109,7 @@ export function webhookRoutes(deps: AppDeps): Router {
   });
 
   // Fallback when webhooks are slow: queue every recent dispute for (re)processing.
-  router.post('/api/disputes/sync', requireDebugToken, async (_req, res) => {
+  router.post('/api/disputes/sync', owner, sameOrigin, async (_req, res) => {
     let disputes;
     try {
       disputes = await listDisputes(paypal, { pageSize: 20 });

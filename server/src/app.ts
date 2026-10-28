@@ -2,6 +2,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import type { Db } from './db/db.js';
 import type { Config } from './config.js';
 import type { PayPalClient } from './paypal/client.js';
+import { authRoutes } from './auth/routes.js';
 import { actionRoutes } from './routes/actions.js';
 import { disputeRoutes } from './routes/disputes.js';
 import { storeRoutes } from './routes/store.js';
@@ -12,6 +13,8 @@ export interface AppDeps {
   paypal: PayPalClient;
   db: Db;
   logger?: Pick<Console, 'info' | 'warn'>;
+  /** Epoch-ms clock for sessions and the login rate limit; tests inject it. */
+  now?: () => number;
 }
 
 // Reserved for future webhook signature debugging; not read anywhere yet.
@@ -38,6 +41,7 @@ export function createApp(deps: AppDeps): express.Express {
   app.get('/health', (_req, res) => {
     res.json({ ok: true });
   });
+  app.use(authRoutes(deps));
   app.use(webhookRoutes(deps));
   app.use(disputeRoutes(deps));
   app.use(actionRoutes(deps));

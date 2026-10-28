@@ -33,6 +33,16 @@ services:
         sync: false
       - key: DEBUG_TOKEN
         sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: OWNER_PASSWORD_HASH
+        sync: false
+      - key: JUDGE_EMAIL
+        sync: false
+      - key: JUDGE_PASSWORD_HASH
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: GROQ_API_KEY

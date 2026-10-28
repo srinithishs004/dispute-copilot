@@ -4,7 +4,7 @@ import { listActions } from '../actions/repo.js';
 import { buildEvidencePack } from '../agent/evidence.js';
 import { allowedActions, type DisputeDetail } from '../paypal/disputes.js';
 import { findOrderBundle } from '../store/repo.js';
-import { makeRequireDebugToken } from './webhooks.js';
+import { requireSeller } from '../auth/guards.js';
 
 type Row = {
   paypal_dispute_id: string;
@@ -37,9 +37,9 @@ const COLS =
   'paypal_dispute_id, reason, status, amount, currency, response_due_at, local_state, manual_reason, order_id, raw';
 
 export function disputeRoutes(deps: AppDeps): Router {
-  const { db, config } = deps;
+  const { db } = deps;
   const router = Router();
-  const guard = makeRequireDebugToken(config);
+  const guard = requireSeller(deps);
 
   router.get('/api/disputes', guard, async (_req, res) => {
     const { rows } = await db.query<Row>(

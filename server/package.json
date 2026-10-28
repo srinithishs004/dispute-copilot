@@ -13,6 +13,7 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
+    "hash-password": "tsx scripts/hash-password.ts",
     "spike:order": "tsx scripts/order.ts",
     "spike:capture": "tsx scripts/capture.ts",
     "spike:disputes": "tsx scripts/disputes.ts",

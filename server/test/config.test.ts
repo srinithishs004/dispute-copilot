@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { loadConfig } from '../src/config.js';
 
 test('loads required values and defaults', () => {
@@ -88,4 +88,35 @@ test('storeName defaults and can be overridden', () => {
   expect(loadConfig(base).storeName).toBe('Dispute Copilot Demo Store');
   expect(loadConfig({ ...base, STORE_NAME: '' }).storeName).toBe('Dispute Copilot Demo Store');
   expect(loadConfig({ ...base, STORE_NAME: 'Acme' }).storeName).toBe('Acme');
+});
+
+describe('auth config', () => {
+  const base = { PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's' };
+
+  test('defaults to no accounts and no secret', () => {
+    expect(loadConfig(base).auth).toEqual({ owner: null, judge: null, sessionSecret: null });
+  });
+
+  test('reads accounts and secret', () => {
+    const c = loadConfig({
+      ...base,
+      OWNER_EMAIL: 'o@x.test',
+      OWNER_PASSWORD_HASH: 'h1',
+      JUDGE_EMAIL: '',
+      JUDGE_PASSWORD_HASH: '',
+      SESSION_SECRET: 'y'.repeat(32),
+    });
+    expect(c.auth.owner).toEqual({ email: 'o@x.test', passwordHash: 'h1' });
+    expect(c.auth.judge).toBeNull();
+    expect(c.auth.sessionSecret).toBe('y'.repeat(32));
+  });
+
+  test('rejects a short SESSION_SECRET naming it', () => {
+    expect(() => loadConfig({ ...base, SESSION_SECRET: 'short' })).toThrow(/SESSION_SECRET/);
+  });
+
+  test('names the missing half of an account pair', () => {
+    expect(() => loadConfig({ ...base, OWNER_EMAIL: 'o@x.test' })).toThrow(/OWNER_PASSWORD_HASH/);
+    expect(() => loadConfig({ ...base, JUDGE_PASSWORD_HASH: 'h' })).toThrow(/JUDGE_EMAIL/);
+  });
 });

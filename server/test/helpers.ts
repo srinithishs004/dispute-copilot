@@ -14,6 +14,7 @@ export const testConfig: Config = {
     webhookId: 'WH-TEST',
   },
   debugToken: 'dbg',
+  auth: { owner: null, judge: null, sessionSecret: null },
   databaseUrl: null,
   pgliteDir: '.data/pglite',
   runWorkerInline: true,
