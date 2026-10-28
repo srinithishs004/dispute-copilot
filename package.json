@@ -1,11 +1,15 @@
 {
   "name": "dispute-copilot",
   "private": true,
-  "workspaces": ["server"],
+  "workspaces": [
+    "server",
+    "web"
+  ],
   "scripts": {
     "test": "npm test -w server",
-    "build": "npm run build -w server && node scripts/copy-web.mjs",
+    "build": "npm run build -w server && npm run build -w web && node scripts/copy-web.mjs",
     "dev": "npm run dev -w server",
-    "start": "npm run start -w server"
+    "start": "npm run start -w server",
+    "test:web": "npm test -w web"
   }
 }

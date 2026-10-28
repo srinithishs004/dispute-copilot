@@ -49,6 +49,15 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      # Build-time values for the judge guide page (public, judge-only sandbox accounts).
+      - key: VITE_JUDGE_EMAIL
+        sync: false
+      - key: VITE_JUDGE_PASSWORD
+        sync: false
+      - key: VITE_SANDBOX_BUYER_EMAIL
+        sync: false
+      - key: VITE_SANDBOX_BUYER_PASSWORD
+        sync: false
 
 databases:
   - name: dispute-copilot-db
