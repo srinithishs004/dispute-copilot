@@ -18,8 +18,15 @@ describe('format', () => {
   it('maps PayPal reason codes to plain words', () => {
     expect(reasonLabel('MERCHANDISE_OR_SERVICE_NOT_RECEIVED')).toBe('Item not received');
     expect(reasonLabel('MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED')).toBe('Not as described');
-    expect(reasonLabel('UNAUTHORISED')).toBe('Unauthorised');
-    expect(reasonLabel('DUPLICATE_TRANSACTION')).toBe('Duplicate Transaction');
+    expect(reasonLabel('UNAUTHORISED')).toBe('Unauthorized payment');
+    expect(reasonLabel('DUPLICATE_TRANSACTION')).toBe('Duplicate transaction');
+    expect(reasonLabel('CREDIT_NOT_PROCESSED')).toBe('Credit not processed');
+    expect(reasonLabel('INCORRECT_AMOUNT')).toBe('Incorrect amount');
+    expect(reasonLabel('PAYMENT_BY_OTHER_MEANS')).toBe('Paid by other means');
+    expect(reasonLabel('CANCELED_RECURRING_BILLING')).toBe('Canceled recurring billing');
+    expect(reasonLabel('PROBLEM_WITH_REMITTANCE')).toBe('Problem with remittance');
+    expect(reasonLabel('OTHER')).toBe('Other');
+    expect(reasonLabel('SOME_NEW_REASON')).toBe('Some new reason');
     expect(reasonLabel(null)).toBe('Unknown reason');
   });
 
@@ -40,7 +47,7 @@ describe('format', () => {
     expect(actionLabel('FIGHT')).toBe('Fight');
     expect(actionLabel('ACCEPT')).toBe('Accept');
     expect(outcomeLabel('RESOLVED_SELLER_FAVOUR')).toBe('Resolved in your favor');
-    expect(outcomeLabel('RESOLVED_BUYER_FAVOUR')).toBe('Resolved in the buyer’s favour');
+    expect(outcomeLabel('RESOLVED_BUYER_FAVOUR')).toBe('Resolved in the buyer’s favor');
     expect(outcomeLabel('CANCELED_BY_BUYER')).toBe('Canceled by the buyer');
     expect(outcomeLabel(null)).toBe('Resolved');
   });

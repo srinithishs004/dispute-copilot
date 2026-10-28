@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgFieldDefinition, AgSimpleDataSourceDefinition } from 'ag-studio';
-import { toStudioData } from './dataSources';
+import { requirementShort, toStudioData } from './dataSources';
 import { feed, OCT27, openDispute } from '../test/dashboardFixtures';
 
 function source(id: string) {
@@ -65,7 +65,32 @@ describe('toStudioData', () => {
   it('labels actions and evidence gaps', () => {
     expect(source('actions').data[0]).toMatchObject({ type: 'Offer a partial refund', state: 'Sent' });
     expect(source('actions').data[0]!.sentAt).toBeInstanceOf(Date);
-    expect(source('evidence_gaps').data[0]).toEqual({ disputeId: OCT27.disputeId, requirement: 'Delivery confirmation' });
+    expect(source('evidence_gaps').data[0]).toEqual({
+      disputeId: OCT27.disputeId,
+      requirement: 'Delivery confirmation',
+      requirementShort: 'Delivery proof',
+    });
+  });
+
+  it('writes the deadline in the Review page words and treats -0 as 0', () => {
+    const now = Date.parse('2026-10-28T12:00:00.000Z');
+    const rows = toStudioData(
+      feed([
+        OCT27,
+        openDispute({ disputeId: 'A', responseDueAt: '2026-10-28T08:00:00.000Z', daysLeft: -0, deadlineFlag: 'overdue' }),
+        openDispute({ disputeId: 'B', responseDueAt: '2026-10-28T20:00:00.000Z', daysLeft: 1, deadlineFlag: 'due_soon' }),
+        openDispute({ disputeId: 'C', responseDueAt: '2026-10-31T13:00:00.000Z', daysLeft: 4 }),
+      ]),
+      now,
+    ).sources[0] as AgSimpleDataSourceDefinition;
+    expect(rows.data.map((r) => r.deadline)).toEqual(['', 'Overdue by 1 day', 'Due today', '3 days left']);
+    expect(Object.is(rows.data[1]!.daysLeft, -0)).toBe(false);
+  });
+
+  it('gives evidence a short axis name', () => {
+    expect(requirementShort('signature on delivery')).toBe('Signature');
+    expect(requirementShort('proof of a separate charge')).toBe('Proof of a…');
+    expect(requirementShort('order record')).toBe('Order record');
   });
 
   it('links actions and gaps to disputes', () => {

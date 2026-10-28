@@ -17,7 +17,8 @@ import { Terms } from './pages/Terms';
 function Layout() {
   const { pathname } = useLocation();
   return (
-    <div className="shell">
+    // The dashboard uses a wider column; the top bar and footer follow it so edges line up.
+    <div className={pathname === '/dashboard' ? 'shell shell--wide' : 'shell'}>
       <a className="skip-link" href="#main">
         Skip to content
       </a>

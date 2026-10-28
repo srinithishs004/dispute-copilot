@@ -28,19 +28,22 @@ export type ActionItem = {
 const asIso = (v: unknown): string | null => (v instanceof Date ? v.toISOString() : str(v));
 
 /** Open disputes, soonest deadline first; disputes without a deadline go last. */
-export function actionNeededItems(rows: PlainRow[]): ActionItem[] {
+export function actionNeededItems(rows: PlainRow[], now: number = Date.now()): ActionItem[] {
   return rows
     .filter((r) => r.resolved !== true && str(r.disputeId))
     .map((r) => {
       const flag = str(r.deadlineFlag);
+      const dueAt = asIso(r.responseDueAt);
+      // Past the deadline reads as overdue even before the server flag catches up.
+      const overdue = flag === 'overdue' || (dueAt !== null && Date.parse(dueAt) < now);
       return {
         disputeId: str(r.disputeId)!,
         reason: str(r.reason) ?? 'Unknown reason',
         state: str(r.localState) ?? '',
         amount: money(num(r.originalAmount), str(r.currency)),
-        dueAt: asIso(r.responseDueAt),
+        dueAt,
         daysLeft: num(r.daysLeft),
-        tone: flag === 'overdue' ? 'danger' : flag === 'due_soon' ? 'warning' : 'plain',
+        tone: overdue ? 'danger' : flag === 'due_soon' ? 'warning' : 'plain',
       } satisfies ActionItem;
     })
     .sort((a, b) => {
@@ -50,7 +53,7 @@ export function actionNeededItems(rows: PlainRow[]): ActionItem[] {
 }
 
 export function ActionNeededView({ rows, now = Date.now() }: { rows: PlainRow[]; now?: number }) {
-  const items = actionNeededItems(rows);
+  const items = actionNeededItems(rows, now);
   if (items.length === 0) {
     return (
       <div className="dw dw--empty">

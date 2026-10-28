@@ -12,14 +12,29 @@ export function titleCase(code: string): string {
     .join(' ');
 }
 
+/** "SOME_NEW_CODE" -> "Some new code". */
+export function sentenceCase(code: string): string {
+  const words = code.toLowerCase().split(/[_\s]+/).filter(Boolean).join(' ');
+  return words ? words[0]!.toUpperCase() + words.slice(1) : words;
+}
+
+/** Every PayPal dispute reason code, in plain sentence case (US spelling). */
 const REASONS: Record<string, string> = {
   MERCHANDISE_OR_SERVICE_NOT_RECEIVED: 'Item not received',
   MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED: 'Not as described',
+  UNAUTHORISED: 'Unauthorized payment',
+  CREDIT_NOT_PROCESSED: 'Credit not processed',
+  DUPLICATE_TRANSACTION: 'Duplicate transaction',
+  INCORRECT_AMOUNT: 'Incorrect amount',
+  PAYMENT_BY_OTHER_MEANS: 'Paid by other means',
+  CANCELED_RECURRING_BILLING: 'Canceled recurring billing',
+  PROBLEM_WITH_REMITTANCE: 'Problem with remittance',
+  OTHER: 'Other',
 };
 
 export function reasonLabel(code: string | null): string {
   if (!code) return 'Unknown reason';
-  return REASONS[code] ?? titleCase(code);
+  return REASONS[code] ?? sentenceCase(code);
 }
 
 const STATES: Record<LocalState, string> = {
@@ -87,7 +102,7 @@ export const ACTION_SHORT: Record<DisputeAction, string> = {
 
 const OUTCOMES: Record<string, string> = {
   RESOLVED_SELLER_FAVOUR: 'Resolved in your favor',
-  RESOLVED_BUYER_FAVOUR: 'Resolved in the buyer’s favour',
+  RESOLVED_BUYER_FAVOUR: 'Resolved in the buyer’s favor',
   RESOLVED_WITH_PAYOUT: 'Resolved with a PayPal payout',
   CANCELED_BY_BUYER: 'Canceled by the buyer',
   ACCEPTED: 'Claim accepted',
@@ -96,7 +111,7 @@ const OUTCOMES: Record<string, string> = {
 
 export function outcomeLabel(code: string | null): string {
   if (!code) return 'Resolved';
-  return OUTCOMES[code] ?? titleCase(code);
+  return OUTCOMES[code] ?? sentenceCase(code);
 }
 
 export function money(value: string | number | null | undefined, currency: string | null | undefined): string {

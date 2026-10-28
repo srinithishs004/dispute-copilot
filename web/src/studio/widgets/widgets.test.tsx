@@ -24,7 +24,7 @@ const rowsOf = (...ds: Parameters<typeof feed>[0]) => studioDisputeRows(feed(ds)
 
 describe('Action needed', () => {
   it('lists open disputes by days left, with no deadline last', () => {
-    const items = actionNeededItems(rowsOf(OCT27, ...OPEN));
+    const items = actionNeededItems(rowsOf(OCT27, ...OPEN), NOW);
     expect(items.map((i) => i.disputeId)).toEqual(['PP-D-LATE', 'PP-D-SOON', 'PP-D-LATER', 'PP-D-NODUE']);
   });
 
@@ -57,6 +57,17 @@ describe('Action needed', () => {
     );
     expect(screen.getByText('Nothing needs you right now')).toBeTruthy();
     expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('marks a dispute overdue by a few hours as overdue, like the Review page', () => {
+    const late = openDispute({ disputeId: 'PP-D-HOURS', daysLeft: -0, responseDueAt: new Date(NOW - 3 * 3_600_000).toISOString(), deadlineFlag: null });
+    const { container } = render(
+      <MemoryRouter>
+        <ActionNeededView rows={rowsOf(late)} now={NOW} />
+      </MemoryRouter>,
+    );
+    expect(container.querySelector('.aw__due')!.textContent).toBe('Overdue by 1 day');
+    expect(container.querySelector('.aw__due')!.className).toMatch(/aw__due--danger/);
   });
 });
 

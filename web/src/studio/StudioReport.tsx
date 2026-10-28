@@ -4,7 +4,7 @@ import { AgStudioAiModule } from 'ag-studio';
 import type { AgAiHarnessSetup, AgPanelConfig, AgStudioApi, AgStudioModule } from 'ag-studio';
 import type { DashboardFeed } from '../lib/types';
 import { toStudioData } from './dataSources';
-import { initialReport, type LayoutVariant } from './layout';
+import { initialReport, reportHeight, type LayoutVariant } from './layout';
 import { applyStudioLicense } from './license';
 import { useKaalaStudioTheme } from './studioTheme';
 import { studioWidgets } from './widgets';
@@ -65,7 +65,10 @@ export default function StudioReport({ feed, ai, onApiReady }: StudioReportProps
     [studio, variant],
   );
   const data = useMemo(() => toStudioData(feed), [feed]);
-  const initialState = useMemo(() => initialReport(variant), [variant]);
+  // Sized to the open disputes when Studio is created; later refreshes keep the layout.
+  const openCount = feed.sources.disputes.filter((d) => d.amountKept === null).length;
+  const openCountRef = useRef(openCount);
+  const initialState = useMemo(() => initialReport(variant, openCountRef.current), [variant]);
   const panels = useMemo(() => studioPanels(Boolean(ai), variant), [ai, variant]);
   const ref = useRef<AgStudio>(null);
 
@@ -80,7 +83,7 @@ export default function StudioReport({ feed, ai, onApiReady }: StudioReportProps
   }, [data]);
 
   return (
-    <div className={`studio-host studio-host--${variant}`} data-testid="studio-host">
+    <div className={`studio-host studio-host--${variant}`} data-testid="studio-host" style={{ height: reportHeight(initialState) }}>
       <AgStudio
         // Remount on a breakpoint change so the preset layout for that width applies.
         key={variant}

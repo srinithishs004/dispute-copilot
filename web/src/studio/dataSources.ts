@@ -1,5 +1,5 @@
 import type { AgDataSourcesDefinition, AgFieldDefinition } from 'ag-studio';
-import { ACTION_SHORT, actionLabel, paypalStatusLabel, reasonLabel, sentence, stateLabel, titleCase } from '../lib/format';
+import { ACTION_SHORT, actionLabel, deadlineText, paypalStatusLabel, reasonLabel, sentence, sentenceCase, stateLabel, titleCase } from '../lib/format';
 import type { DashboardFeed, DisputeAction } from '../lib/types';
 
 /**
@@ -19,7 +19,32 @@ const OUTCOME_SHORT: Record<string, string> = {
 
 export function outcomeShort(code: string | null): string | null {
   if (!code) return null;
-  return OUTCOME_SHORT[code] ?? titleCase(code);
+  return OUTCOME_SHORT[code] ?? sentenceCase(code);
+}
+
+/** Short axis names for the evidence the server checks (server/src/agent/evidence.ts). */
+const REQUIREMENT_SHORT: Record<string, string> = {
+  'tracking number': 'Tracking',
+  'delivery confirmation': 'Delivery proof',
+  'signature on delivery': 'Signature',
+  'item description': 'Description',
+  'buyer communication': 'Buyer messages',
+  'refund policy': 'Refund policy',
+  'order record': 'Order record',
+};
+
+/** Short name for a chart axis: mapped, else whole words up to 16 characters. */
+export function requirementShort(requirement: string): string {
+  const key = requirement.trim().toLowerCase();
+  const mapped = REQUIREMENT_SHORT[key];
+  if (mapped) return mapped;
+  if (key.length <= 16) return sentence(key);
+  let out = '';
+  for (const w of key.split(/\s+/)) {
+    if (out && (out + ' ' + w).length > 16) break;
+    out = out ? `${out} ${w}` : w;
+  }
+  return sentence(out) + '…';
 }
 
 function toDate(iso: string | null): Date | null {
@@ -42,6 +67,7 @@ export type StudioDisputeRow = {
   currency: string | null;
   responseDueAt: Date | null;
   daysLeft: number | null;
+  deadline: string;
   deadlineFlag: string | null;
   recommendation: string | null;
   confidence: number | null;
@@ -50,7 +76,7 @@ export type StudioDisputeRow = {
   createdAt: Date | null;
 };
 
-export function studioDisputeRows(feed: DashboardFeed): StudioDisputeRow[] {
+export function studioDisputeRows(feed: DashboardFeed, now: number = Date.now()): StudioDisputeRow[] {
   return feed.sources.disputes.map((d) => {
     const resolved = d.amountKept !== null;
     return {
@@ -64,7 +90,10 @@ export function studioDisputeRows(feed: DashboardFeed): StudioDisputeRow[] {
       amountRefunded: resolved ? cents(d.originalAmount - (d.amountKept ?? 0)) : null,
       currency: d.currency,
       responseDueAt: toDate(d.responseDueAt),
-      daysLeft: d.daysLeft,
+      // The server rounds up, so a few hours overdue arrives as -0.
+      daysLeft: d.daysLeft === null ? null : d.daysLeft === 0 ? 0 : d.daysLeft,
+      // Same words as the Review page ("2 days left", "Due today", "Overdue by 1 day").
+      deadline: resolved ? '' : (deadlineText(d.responseDueAt, now) ?? ''),
       deadlineFlag: d.deadlineFlag || null,
       recommendation: d.recommendation ? (ACTION_SHORT[d.recommendation as DisputeAction] ?? titleCase(d.recommendation)) : null,
       confidence: d.confidence,
@@ -104,7 +133,7 @@ const dateTime = (id: string, name: string, description: string): Field => ({
   },
 });
 
-export function toStudioData(feed: DashboardFeed): AgDataSourcesDefinition {
+export function toStudioData(feed: DashboardFeed, now: number = Date.now()): AgDataSourcesDefinition {
   const currency = feedCurrency(feed);
   const money = (id: string, name: string, description: string): Field => ({
     id,
@@ -126,7 +155,12 @@ export function toStudioData(feed: DashboardFeed): AgDataSourcesDefinition {
     money('amountRefunded', 'Amount refunded', 'Resolved disputes only: disputed amount minus amount kept. Empty while open.'),
     text('currency', 'Currency', 'ISO currency code.'),
     dateTime('responseDueAt', 'Response due', 'Deadline for the seller to respond to PayPal.'),
-    int('daysLeft', 'Days left', 'Whole days until the response deadline. Negative when overdue, empty when resolved.'),
+    int(
+      'daysLeft',
+      'Days left',
+      'Days until the response deadline, rounded up: 1 means due within a day, 0 or less means the deadline has passed. Empty when resolved or there is no deadline.',
+    ),
+    text('deadline', 'Deadline', 'Deadline in words, as on the Review page: "3 days left", "Due today", "Overdue by 2 days". Empty when resolved.'),
     text('deadlineFlag', 'Deadline flag', 'due_soon when under 3 days are left, overdue after the deadline, otherwise empty.'),
     text('recommendation', 'AI recommendation', 'What the AI suggested: Fight, Partial refund or Accept. Empty before analysis.'),
     int('confidence', 'AI confidence', 'Confidence of the latest AI analysis, 0 to 100.'),
@@ -145,7 +179,8 @@ export function toStudioData(feed: DashboardFeed): AgDataSourcesDefinition {
 
   const gapFields: Field[] = [
     text('disputeId', 'Dispute', 'PayPal dispute id.'),
-    text('requirement', 'Missing evidence', 'One evidence item the latest analysis found missing.'),
+    text('requirement', 'Missing evidence', 'One evidence item the latest analysis found missing, in full.'),
+    text('requirementShort', 'Evidence', 'Short name of the missing evidence item, for chart axes.'),
   ];
 
   return {
@@ -159,7 +194,7 @@ export function toStudioData(feed: DashboardFeed): AgDataSourcesDefinition {
         name: 'Disputes',
         description: 'One row per PayPal dispute with the latest AI recommendation.',
         fields: disputeFields,
-        data: studioDisputeRows(feed),
+        data: studioDisputeRows(feed, now),
       },
       {
         id: 'actions',
@@ -179,7 +214,11 @@ export function toStudioData(feed: DashboardFeed): AgDataSourcesDefinition {
         name: 'Evidence gaps',
         description: 'Evidence the latest AI analysis found missing, one row per item.',
         fields: gapFields,
-        data: feed.sources.evidence_gaps.map((g) => ({ disputeId: g.disputeId, requirement: sentence(g.requirement) })),
+        data: feed.sources.evidence_gaps.map((g) => ({
+          disputeId: g.disputeId,
+          requirement: sentence(g.requirement),
+          requirementShort: requirementShort(g.requirement),
+        })),
       },
     ],
     relationships: [
