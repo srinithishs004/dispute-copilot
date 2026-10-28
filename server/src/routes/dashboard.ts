@@ -65,7 +65,8 @@ export function dashboardRoutes(deps: AppDeps): Router {
       `select l.dispute_id, g.requirement
        from (select distinct on (dispute_id) dispute_id, missing_evidence from analyses
              order by dispute_id, created_at desc, id desc) l
-       cross join lateral jsonb_array_elements_text(coalesce(l.missing_evidence, '[]'::jsonb)) with ordinality as g(requirement, ord)
+       cross join lateral jsonb_array_elements_text(
+         case when jsonb_typeof(l.missing_evidence) = 'array' then l.missing_evidence else '[]'::jsonb end) with ordinality as g(requirement, ord)
        order by l.dispute_id, g.ord`,
     );
 

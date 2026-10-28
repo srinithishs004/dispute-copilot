@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { deadlineSweepJob } from '../../src/jobs/deadlineSweep.js';
+import { deadlineSweepJob, ensureDeadlineSweepQueued } from '../../src/jobs/deadlineSweep.js';
 import { enqueue } from '../../src/jobs/queue.js';
 import { makeTestDb } from '../helpers.js';
 
@@ -66,6 +66,16 @@ describe('deadlineSweepJob', () => {
     await db.query("update jobs set state = 'running' where id = $1", [id]);
     await enqueue(db, 'deadlineSweep', {}, { runAt: new Date(NOW.getTime() + 1000) });
     await deadlineSweepJob({ db, now: () => NOW })({ id, type: 'deadlineSweep', payload: {}, attempts: 1 });
+    const { rows } = await db.query("select 1 from jobs where type = 'deadlineSweep' and state = 'queued'");
+    expect(rows).toHaveLength(1);
+  });
+});
+
+describe('ensureDeadlineSweepQueued', () => {
+  it('enqueues when none exists and is a no-op when one is queued', async () => {
+    const { db } = await setup();
+    expect(await ensureDeadlineSweepQueued(db, NOW)).toBe(true);
+    expect(await ensureDeadlineSweepQueued(db, NOW)).toBe(false);
     const { rows } = await db.query("select 1 from jobs where type = 'deadlineSweep' and state = 'queued'");
     expect(rows).toHaveLength(1);
   });

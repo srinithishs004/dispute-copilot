@@ -35,6 +35,8 @@ export function deadlineSweepJob(deps: DeadlineSweepDeps): JobHandler {
   const { db, now } = deps;
   return async (job) => {
     const at = now();
+    // Reschedule first so a failing update still leaves a next run.
+    await enqueueSweepIfNone(db, new Date(at.getTime() + SWEEP_INTERVAL_MS), job.id);
     await db.query(
       `update disputes set deadline_flag = case
          when local_state = 'RESOLVED' or response_due_at is null then null
@@ -48,6 +50,5 @@ export function deadlineSweepJob(deps: DeadlineSweepDeps): JobHandler {
          else null end)`,
       [at.toISOString(), new Date(at.getTime() + DUE_SOON_MS).toISOString()],
     );
-    await enqueueSweepIfNone(db, new Date(at.getTime() + SWEEP_INTERVAL_MS), job.id);
   };
 }
