@@ -29,13 +29,41 @@ export type DisputeDetail = DisputeSummary & {
 
 export async function listDisputes(
   c: PayPalClient,
-  opts: { pageSize?: number } = {},
+  opts: { pageSize?: number; page?: number } = {},
 ): Promise<DisputeSummary[]> {
-  const res = await c.request<{ items?: DisputeSummary[] }>(
+  return (await listDisputesPage(c, opts)).items;
+}
+
+async function listDisputesPage(
+  c: PayPalClient,
+  opts: { pageSize?: number; page?: number },
+): Promise<{ items: DisputeSummary[]; hasNext: boolean }> {
+  const pageSize = opts.pageSize ?? 10;
+  const page = opts.page && opts.page > 1 ? `&page=${opts.page}` : '';
+  const res = await c.request<{ items?: DisputeSummary[]; links?: { rel?: string }[] }>(
     'GET',
-    `/v1/customer/disputes?page_size=${opts.pageSize ?? 10}`,
+    `/v1/customer/disputes?page_size=${pageSize}${page}`,
   );
-  return res.items ?? [];
+  const items = res.items ?? [];
+  // PayPal lists a "next" link while more pages exist; fall back to a full page when links are absent.
+  const hasNext = res.links ? res.links.some((l) => l.rel === 'next') : items.length >= pageSize;
+  return { items, hasNext };
+}
+
+/** Every dispute PayPal lists, following pages (a safety cap stops a runaway loop). */
+export async function listAllDisputes(
+  c: PayPalClient,
+  opts: { pageSize?: number; maxPages?: number } = {},
+): Promise<DisputeSummary[]> {
+  const pageSize = opts.pageSize ?? 20;
+  const maxPages = opts.maxPages ?? 10;
+  const all: DisputeSummary[] = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const { items, hasNext } = await listDisputesPage(c, { pageSize, page });
+    all.push(...items);
+    if (!hasNext || items.length === 0) break;
+  }
+  return all;
 }
 
 export function getDispute(c: PayPalClient, id: string): Promise<DisputeDetail> {

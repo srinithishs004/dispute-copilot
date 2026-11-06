@@ -19,7 +19,12 @@ export function EvidenceChecklist({ evidence }: { evidence: EvidencePack | null 
       </section>
     );
   }
-  const present = evidence.checklist.filter((c) => c.present).length;
+  // A parcel the carrier lost cannot have a delivery scan or a signature, so those rows are not gaps.
+  const lost = Boolean(evidence.carrierException);
+  const notApplicable = (c: { requirement: string; present: boolean }) =>
+    lost && !c.present && /deliver|signature/i.test(c.requirement);
+  const applicable = evidence.checklist.filter((c) => !notApplicable(c));
+  const present = applicable.filter((c) => c.present).length;
   return (
     <>
       <section className="k-card review-card" aria-labelledby="evidence-title">
@@ -28,15 +33,19 @@ export function EvidenceChecklist({ evidence }: { evidence: EvidencePack | null 
             Evidence
           </h2>
           <span className="review-card__count">
-            {present} of {evidence.checklist.length} on file
+            {present} of {applicable.length} on file
           </span>
         </div>
         <ul className="checklist">
           {evidence.checklist.map((c) => (
-            <li key={c.requirement} className={c.present ? 'checklist__item is-present' : 'checklist__item is-missing'}>
+            <li
+              key={c.requirement}
+              className={c.present ? 'checklist__item is-present' : 'checklist__item is-missing'}
+              title={notApplicable(c) ? 'The carrier reports this parcel as lost, so there is no delivery to confirm.' : undefined}
+            >
               {c.present ? <SquareCheckIcon size={18} /> : <SquareMinusIcon size={18} />}
               <span className="checklist__name">{sentence(c.requirement)}</span>
-              <span className="checklist__state">{c.present ? 'On file' : 'Missing'}</span>
+              <span className="checklist__state">{c.present ? 'On file' : notApplicable(c) ? 'Not applicable: parcel lost' : 'Missing'}</span>
             </li>
           ))}
         </ul>

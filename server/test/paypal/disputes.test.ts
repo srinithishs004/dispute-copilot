@@ -6,6 +6,7 @@ import {
   allowedActions,
   escalate,
   getDispute,
+  listAllDisputes,
   listDisputes,
   makeOffer,
   provideEvidence,
@@ -28,6 +29,38 @@ describe('listDisputes', () => {
     const { client, calls } = fakeClient({ items });
     expect(await listDisputes(client, { pageSize: 5 })).toEqual(items);
     expect(calls[0]!.path).toBe('/v1/customer/disputes?page_size=5');
+  });
+});
+
+describe('listAllDisputes', () => {
+  const item = (n: number) => ({ dispute_id: `PP-D-${n}`, reason: 'X', status: 'OPEN', create_time: 't' });
+
+  test('follows next links page by page and stops when there is none', async () => {
+    const { client, calls } = fakeClient((call) =>
+      call.path.includes('page=2')
+        ? { items: [item(3)], links: [] }
+        : { items: [item(1), item(2)], links: [{ rel: 'next' }] },
+    );
+    const all = await listAllDisputes(client, { pageSize: 2 });
+    expect(all.map((d) => d.dispute_id)).toEqual(['PP-D-1', 'PP-D-2', 'PP-D-3']);
+    expect(calls.map((c) => c.path)).toEqual([
+      '/v1/customer/disputes?page_size=2',
+      '/v1/customer/disputes?page_size=2&page=2',
+    ]);
+  });
+
+  test('without links, a full page means there may be more; a short page ends it', async () => {
+    const { client, calls } = fakeClient((call) =>
+      call.path.includes('page=2') ? { items: [item(3)] } : { items: [item(1), item(2)] },
+    );
+    expect(await listAllDisputes(client, { pageSize: 2 })).toHaveLength(3);
+    expect(calls).toHaveLength(2);
+  });
+
+  test('stops at maxPages even if PayPal keeps offering a next page', async () => {
+    const { client, calls } = fakeClient({ items: [item(1)], links: [{ rel: 'next' }] });
+    await listAllDisputes(client, { pageSize: 1, maxPages: 3 });
+    expect(calls).toHaveLength(3);
   });
 });
 

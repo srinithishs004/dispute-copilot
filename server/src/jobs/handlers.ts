@@ -2,6 +2,7 @@ import type { Llm } from '../ai/llm.js';
 import type { Db } from '../db/db.js';
 import type { PayPalClient } from '../paypal/client.js';
 import { deadlineSweepJob } from './deadlineSweep.js';
+import { disputeSyncJob } from './disputeSync.js';
 import { executeActionJob } from './executeAction.js';
 import { analyzeDisputeJob } from './analyzeDispute.js';
 import { processDispute } from './processDispute.js';
@@ -25,5 +26,6 @@ export function buildHandlers(deps: HandlerDeps): Record<string, JobHandler> {
     draftLetter: analyze,
     executeAction: executeActionJob({ db: deps.db, paypal: deps.paypal, now: deps.now }),
     deadlineSweep: deadlineSweepJob({ db: deps.db, now: deps.now }),
+    disputeSync: disputeSyncJob({ db: deps.db, paypal: deps.paypal, now: deps.now, ...(deps.logger ? { logger: deps.logger } : {}) }),
   };
 }

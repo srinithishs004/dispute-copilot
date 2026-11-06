@@ -6,6 +6,7 @@ import { createDb } from './db/db.js';
 import { migrate } from './db/migrate.js';
 import { buildHandlers } from './jobs/handlers.js';
 import { ensureDeadlineSweepQueued } from './jobs/deadlineSweep.js';
+import { ensureDisputeSyncQueued } from './jobs/disputeSync.js';
 import { abortableSleep } from './jobs/sleep.js';
 import { startWorker } from './jobs/worker.js';
 import { createPayPalClient } from './paypal/client.js';
@@ -34,6 +35,7 @@ async function main(): Promise<void> {
   });
 
   await ensureDeadlineSweepQueued(db, new Date());
+  await ensureDisputeSyncQueued(db, new Date());
 
   const abort = new AbortController();
   let workerLoop: Promise<void> = Promise.resolve();

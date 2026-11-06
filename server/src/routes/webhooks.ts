@@ -3,7 +3,7 @@ import type { AppDeps } from '../app.js';
 import { requireOwner, requireSameOrigin } from '../auth/guards.js';
 import { enqueue } from '../jobs/queue.js';
 import { maskId } from '../log.js';
-import { listDisputes } from '../paypal/disputes.js';
+import { listAllDisputes } from '../paypal/disputes.js';
 import { PayPalError } from '../paypal/client.js';
 import { MissingHeadersError, verifyWebhook } from '../paypal/webhooks.js';
 import { disputeIdFromEvent } from '../webhooks/disputeEvent.js';
@@ -112,7 +112,7 @@ export function webhookRoutes(deps: AppDeps): Router {
   router.post('/api/disputes/sync', owner, sameOrigin, async (_req, res) => {
     let disputes;
     try {
-      disputes = await listDisputes(paypal, { pageSize: 20 });
+      disputes = await listAllDisputes(paypal, { pageSize: 20 });
     } catch (err) {
       const detail =
         err instanceof PayPalError
