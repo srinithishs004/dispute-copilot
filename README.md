@@ -20,6 +20,13 @@ On Oct 27, 2026 a $25 sandbox order was disputed by the buyer. The app recommend
 - **PayPal sandbox webhooks and actions.** Dispute webhooks are verified and queued. Approved actions (fight, offer, accept) are sent to the PayPal Disputes API by a worker.
 - **Two logins.** An owner (everything) and a judge (read and approve, no sync, settle or debug endpoints).
 
+## Tools used
+
+- **PayPal developer platform (sandbox).** Orders API for the demo store checkout. Disputes API to fetch a dispute and to send the seller's approved action: provide evidence, make an offer, accept the claim, send a message. Webhooks with signature verification for new disputes.
+- **AI.** Gemini is tried first and Groq is the fallback. They write the recommendation (fight, offer or accept) and the response letter. Code guardrails check the result, for example a fight is downgraded to an offer when required evidence is missing. All model calls go through the server, so the browser never holds an AI key.
+- **AG Grid.** AG Studio and AG Studio React for the seller dashboard, with two custom widgets (Action needed, Money protected), a chart set, a custom theme and layout, and the Studio Agent Framework for the Dispute Analyst agent.
+- **Render.** One web service (API, store and built web app, with the worker inline) and a Postgres database.
+
 ## Architecture
 
 ```
@@ -125,7 +132,7 @@ Server tests use supertest and PGlite with PayPal and AI calls mocked. Web tests
 ## Known limitations
 
 - **The sandbox refuses the seller settle step.** The owner-only `POST /api/disputes/<id>/sandbox/settle` could not settle a dispute in our runs. The demo resolves by the buyer accepting the offer in the PayPal sandbox instead.
-- **Cold start.** On Render's free plan the service sleeps when idle, and the first request can take up to a minute. The app shows a waking up screen meanwhile.
+- **Cold start.** The live demo runs on Render's Starter plan, so it stays awake. On Render's free plan, if you deploy your own copy, the service sleeps when idle and the first request can take up to a minute. The app shows a waking up screen meanwhile.
 - **AG Studio licence watermark.** Without `VITE_AG_STUDIO_LICENSE_KEY` the dashboard shows AG Studio's trial watermark on any host other than localhost.
 - **The Dispute Analyst needs a wide screen.** On phones the dashboard shows the widgets and a note, but not the chat panel.
 
@@ -138,4 +145,5 @@ Server tests use supertest and PGlite with PayPal and AI calls mocked. Web tests
 ## More
 
 - [Runbook: create a sandbox payment and a dispute](docs/runbooks/sandbox-dispute.md)
+- [Sample-case benchmark](docs/benchmark/sample-cases.md): evidence completeness and guardrail results on the 12 seeded orders (`npx tsx server/scripts/benchmark.ts`)
 - [Main design spec](docs/superpowers/specs/2026-10-13-dispute-copilot-design.md) and [Phase 3 spec](docs/superpowers/specs/2026-10-27-phase3-seller-app-design.md)

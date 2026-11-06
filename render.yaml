@@ -1,12 +1,12 @@
 # One web service: webhooks, demo store, seller API, the built web app (dashboard and Review
 # page) and the job worker running inline.
-# plus a small paid Postgres so data survives the free web service sleeping.
+# plus a small paid Postgres. The web service is on the Starter plan so it stays awake for judges.
 # Postgres is paid from Render credits (Basic-256mb, 1 GB).
 services:
   - type: web
     name: dispute-copilot
     runtime: node
-    plan: free
+    plan: starter
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start -w server
     healthCheckPath: /health
