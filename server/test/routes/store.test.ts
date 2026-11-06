@@ -149,7 +149,8 @@ describe('GET /store/return', () => {
     expect(cap[0]!.headers).toEqual({ 'PayPal-Request-Id': `capture-${o.id}` });
     const ships = (await db.query<Record<string, unknown>>('select * from shipments where order_id = $1', [o.id])).rows;
     expect(ships).toHaveLength(1);
-    expect(ships[0]).toMatchObject({ order_id: o.id, carrier: 'USPS', status: 'in_transit' });
+    // The sandbox carrier starts every parcel at "label created" and moves it on a fast clock.
+    expect(ships[0]).toMatchObject({ order_id: o.id, carrier: 'USPS', status: 'pre_transit', simulated: true, sim_scenario: 'DELIVERED' });
     expect(ships[0]!.tracking_number).toMatch(/^9400\d{18}$/);
     expect(ships[0]!.shipped_at).not.toBeNull();
   });

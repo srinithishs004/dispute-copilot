@@ -30,6 +30,28 @@ export type EvidencePack = {
   facts: Fact[];
   checklist: { requirement: string; present: boolean }[];
   missing: string[];
+  /** Set only when the carrier reports the parcel lost or undeliverable. */
+  carrierException?: string;
+};
+
+export type TrackingEvent = {
+  status: string;
+  description: string;
+  location: string | null;
+  occurredAt: string;
+};
+
+export type TrackingShipment = {
+  trackingNumber: string;
+  carrier: string;
+  simulated: boolean;
+  status: 'pre_transit' | 'in_transit' | 'out_for_delivery' | 'delivered' | 'delivery_failed' | string;
+  statusLabel: string;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  signedBy: string | null;
+  deliveredTo: string | null;
+  events: TrackingEvent[];
 };
 
 export type Analysis = {
@@ -71,6 +93,8 @@ export type DisputeDetail = {
   actions: ActionEntry[];
   manualReason: string | null;
   evidence: EvidencePack | null;
+  /** Carrier tracking per parcel of the matched order (empty when no order matched). */
+  tracking?: TrackingShipment[];
   latestAnalysis: Analysis | null;
 };
 

@@ -3,7 +3,7 @@ import { join, relative, sep } from 'node:path';
 import express from 'express';
 
 // Paths owned by the API; the single-page fallback never answers for these.
-const SERVER_PREFIXES = ['/api', '/auth', '/webhooks', '/store', '/debug', '/health'];
+const SERVER_PREFIXES = ['/api', '/auth', '/webhooks', '/store', '/track', '/debug', '/health'];
 const isServerPath = (path: string) => SERVER_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
 
 /**

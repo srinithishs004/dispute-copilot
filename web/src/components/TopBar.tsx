@@ -41,20 +41,22 @@ export function TopBar() {
                     Dashboard
                   </NavLink>
                 </li>
-              ) : (
-                <>
-                  <li>
-                    <NavLink to="/guide" className="nav-link">
-                      Guide
-                    </NavLink>
-                  </li>
-                  <li>
-                    <a href="/store" className="nav-link">
-                      Store
-                    </a>
-                  </li>
-                </>
-              )}
+              ) : null}
+              <li>
+                <NavLink to="/guide" className="nav-link">
+                  Guide
+                </NavLink>
+              </li>
+              <li>
+                <a href="/store" className="nav-link">
+                  Store
+                </a>
+              </li>
+              <li>
+                <a href="/track" className="nav-link">
+                  Track
+                </a>
+              </li>
             </ul>
           </nav>
           {user ? (

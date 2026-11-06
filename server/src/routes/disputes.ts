@@ -3,6 +3,7 @@ import type { AppDeps } from '../app.js';
 import { listActions } from '../actions/repo.js';
 import { buildEvidencePack } from '../agent/evidence.js';
 import { allowedActions, type DisputeDetail } from '../paypal/disputes.js';
+import { trackingViewsForOrder } from '../carrier/sandboxCarrier.js';
 import { findOrderBundle } from '../store/repo.js';
 import { requireSeller } from '../auth/guards.js';
 
@@ -59,6 +60,7 @@ export function disputeRoutes(deps: AppDeps): Router {
       res.status(404).json({ error: 'not found' });
       return;
     }
+    const tracking = r.order_id ? await trackingViewsForOrder(db, r.order_id, new Date()) : [];
     const bundle = r.order_id && r.raw ? await findOrderBundle(db, r.order_id) : null;
     const evidence = bundle && r.raw ? buildEvidencePack(r.raw, bundle) : null;
     const a = (
@@ -97,6 +99,7 @@ export function disputeRoutes(deps: AppDeps): Router {
       })),
       manualReason: r.manual_reason,
       evidence,
+      tracking,
       latestAnalysis: a
         ? {
             recommendation: a.recommendation,

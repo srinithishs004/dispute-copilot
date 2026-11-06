@@ -21,6 +21,7 @@ import { useToast } from '../components/Toast';
 import { ActionTimeline, failureText } from '../components/review/ActionTimeline';
 import { ConfirmDialog } from '../components/review/ConfirmDialog';
 import { EvidenceChecklist } from '../components/review/EvidenceChecklist';
+import { TrackingCard } from '../components/review/TrackingCard';
 import { LetterEditor, NOTE_MAX, NOTE_MIN, type FieldErrors } from '../components/review/LetterEditor';
 import { ManualBanner } from '../components/review/ManualBanner';
 import { RecommendationCard } from '../components/review/RecommendationCard';
@@ -498,6 +499,7 @@ export function Review() {
 
         <div className="review-col">
           <EvidenceChecklist evidence={data.evidence} />
+          <TrackingCard tracking={data.tracking} />
           <ActionTimeline
             actions={data.actions}
             analysis={data.latestAnalysis}

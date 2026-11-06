@@ -6,6 +6,7 @@ import { buildEvidencePack } from '../agent/evidence.js';
 import { draftLetter, LetterRejectedError } from '../agent/letter.js';
 import { setLocalState } from '../disputes/repo.js';
 import type { DisputeDetail } from '../paypal/disputes.js';
+import { syncOrderTracking } from '../carrier/sandboxCarrier.js';
 import { findOrderBundle } from '../store/repo.js';
 import { MAX_ATTEMPTS } from './queue.js';
 import type { JobHandler } from './worker.js';
@@ -33,6 +34,7 @@ export function analyzeDisputeJob(deps: AnalyzeDisputeDeps): JobHandler {
     // Only analyze while still being analyzed; a later state (e.g. RESOLVED) must not be overwritten.
     if (dispute.local_state !== 'ANALYZING') return;
     try {
+      if (dispute.order_id) await syncOrderTracking(db, dispute.order_id, new Date());
       const bundle = dispute.order_id ? await findOrderBundle(db, dispute.order_id) : null;
       if (!dispute.order_id || !bundle) {
         await setLocalState(db, disputeId, 'NEEDS_MANUAL', 'no matching order');

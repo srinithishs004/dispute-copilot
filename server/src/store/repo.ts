@@ -13,6 +13,9 @@ export interface OrderRow {
 }
 
 export interface ShipmentRow {
+  signedBy?: string | null;
+  deliveredTo?: string | null;
+  simulated?: boolean;
   id: number;
   orderId: string;
   carrier: string | null;
@@ -41,7 +44,17 @@ export type OrderBundle = {
   shipments: ShipmentRow[];
   messages: MessageRow[];
   policy: PolicyRow;
+  /** Carrier scan events for the order's parcels, oldest first. Empty for parcels without a simulator history. */
+  trackingEvents?: TrackingEventRow[];
 };
+
+export interface TrackingEventRow {
+  shipmentId: number;
+  status: string;
+  description: string;
+  location: string | null;
+  occurredAt: string;
+}
 
 export const PRODUCTS: { id: string; name: string; price: string }[] = [
   { id: 'mug', name: 'Ceramic Mug', price: '18.00' },
@@ -101,8 +114,12 @@ export async function findOrderBundle(db: Db, orderId: string): Promise<OrderBun
     shipped_at: Ts;
     delivered_at: Ts;
     signature_proof: boolean | null;
+    signed_by: string | null;
+    delivered_to: string | null;
+    simulated: boolean | null;
   }>(
-    `select id, order_id, carrier, tracking_number, status, shipped_at, delivered_at, signature_proof
+    `select id, order_id, carrier, tracking_number, status, shipped_at, delivered_at, signature_proof,
+            signed_by, delivered_to, simulated
        from shipments where order_id = $1 order by shipped_at, id`,
     [orderId],
   );
@@ -115,6 +132,18 @@ export async function findOrderBundle(db: Db, orderId: string): Promise<OrderBun
   }>(`select id, order_id, sender, body, sent_at from messages where order_id = $1 order by sent_at, id`, [
     orderId,
   ]);
+  const evs = await db.query<{
+    shipment_id: number;
+    status: string;
+    description: string;
+    location: string | null;
+    occurred_at: Ts;
+  }>(
+    `select e.shipment_id, e.status, e.description, e.location, e.occurred_at
+       from tracking_events e join shipments s on s.id = e.shipment_id
+      where s.order_id = $1 order by e.occurred_at, e.id`,
+    [orderId],
+  );
   const pol = await db.query<{ refund_window_days: number; policy_text: string }>(
     `select refund_window_days, policy_text from store_policy where id = 1`,
   );
@@ -131,6 +160,16 @@ export async function findOrderBundle(db: Db, orderId: string): Promise<OrderBun
       shippedAt: iso(s.shipped_at),
       deliveredAt: iso(s.delivered_at),
       signatureProof: s.signature_proof ?? false,
+      signedBy: s.signed_by,
+      deliveredTo: s.delivered_to,
+      simulated: s.simulated ?? false,
+    })),
+    trackingEvents: evs.rows.map((e) => ({
+      shipmentId: e.shipment_id,
+      status: e.status,
+      description: e.description,
+      location: e.location,
+      occurredAt: iso(e.occurred_at)!,
     })),
     messages: msgs.rows.map((m) => ({
       id: m.id,
