@@ -5,9 +5,16 @@ import { ArrowRightIcon, InfoIcon } from '../components/Icons';
 
 const STEPS = [
   { title: 'A buyer opens a dispute', text: 'PayPal tells Dispute Copilot through a webhook, so nothing needs checking by hand.' },
-  { title: 'The evidence is gathered', text: 'The order, the payment and the dispute details are pulled into one place.' },
+  { title: 'The evidence is gathered', text: 'The order, the carrier tracking and the dispute details are pulled into one place, with proof of delivery or of non-delivery.' },
   { title: 'The AI recommends', text: 'Fight, offer a partial refund or accept, with the reasons and a draft letter.' },
   { title: 'You approve', text: 'Edit the letter if you like. Only then is the response sent to PayPal.' },
+];
+
+const SAFEGUARDS = [
+  { title: 'Nothing is sent without you', text: 'The AI recommends and drafts. Only your approval sends anything to PayPal.' },
+  { title: 'No fight on thin evidence', text: 'If required proof is missing, a fight is downgraded to an offer and the gaps are listed.' },
+  { title: 'A lost parcel is refunded', text: 'When the carrier reports the package lost, a full refund is recommended instead of a losing fight.' },
+  { title: 'Proof from the carrier', text: 'Delivery scans, the signature and the delivery time come from tracking, not from memory.' },
 ];
 
 const PROVEN_RUN = [
@@ -76,6 +83,21 @@ export function Home() {
           {STEPS.map((s, i) => (
             <li key={s.title} className="k-step">
               <span className="k-step__n">STEP {String(i + 1).padStart(2, '0')}</span>
+              <span className="k-step__t">{s.title}</span>
+              <span className="how__text">{s.text}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="section" aria-labelledby="safe-title">
+        <h2 id="safe-title" className="t-h2 section__title">
+          Built so the AI cannot cause harm
+        </h2>
+        <ol className="k-steps how">
+          {SAFEGUARDS.map((s, i) => (
+            <li key={s.title} className="k-step">
+              <span className="k-step__n">SAFEGUARD {String(i + 1).padStart(2, '0')}</span>
               <span className="k-step__t">{s.title}</span>
               <span className="how__text">{s.text}</span>
             </li>

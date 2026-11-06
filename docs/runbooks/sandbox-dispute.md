@@ -36,7 +36,9 @@ Success: http://localhost:3000/health shows `{"ok":true}`.
 
 Open http://localhost:3000/store in a browser (a private window helps). Pick an item and start checkout. Log in to PayPal as the sandbox **Personal** account and approve the payment. PayPal sends you back to the store, which captures the payment for you.
 
-Success: you see a thank-you page with your order ID (`ORD-...`). Write it down. You do not need `spike:order` or `spike:capture` for new orders; they are only for experiments.
+Before you pay, choose what the sandbox carrier will do for that order: deliver it with a signature (the default) or lose the package. The thank-you page links to the tracking page, where scans appear on a fast clock and the parcel is delivered about 90 seconds after payment.
+
+Success: you see a thank-you page with your order ID (`ORD-...`) and a tracking number. Write them down. You do not need `spike:order` or `spike:capture` for new orders; they are only for experiments.
 
 ## Step 4: Open a dispute as the buyer
 

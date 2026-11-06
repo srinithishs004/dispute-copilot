@@ -14,6 +14,7 @@ export function Privacy() {
       <h2 className="t-h3">What is stored</h2>
       <ul>
         <li>Sandbox orders and disputes from the demo store and the PayPal sandbox.</li>
+        <li>Simulated parcel tracking for sandbox orders: scan events, delivery time and a signature record. Anyone with a tracking number can view its tracking page, which shows no buyer details.</li>
         <li>The AI recommendations and draft letters made for those disputes.</li>
         <li>Approvals: which action was approved and when.</li>
         <li>A session cookie that keeps you signed in. It is removed when you sign out or after it expires.</li>

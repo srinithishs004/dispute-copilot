@@ -9,7 +9,17 @@ const STEPS: { title: string; body: ReactNode }[] = [
     title: 'Buy an item from the demo store',
     body: (
       <>
-        Open the <a href="/store">demo store</a> and buy any item. Pay with the sandbox buyer account below.
+        Open the <a href="/store">demo store</a>, choose what the sandbox carrier will do (deliver the parcel with a
+        signature, or lose it) and buy any item. Pay with the sandbox buyer account below.
+      </>
+    ),
+  },
+  {
+    title: 'Watch the parcel',
+    body: (
+      <>
+        The sandbox carrier moves the parcel on a fast clock. Follow it on the <a href="/track">tracking page</a> with the
+        number from your order. A delivered parcel gives proof of delivery, a lost one gives proof of non-delivery.
       </>
     ),
   },
@@ -39,7 +49,7 @@ const STEPS: { title: string; body: ReactNode }[] = [
   },
   {
     title: 'Review and approve',
-    body: 'Read the evidence, the recommendation and the letter. Edit the letter if you want, then approve.',
+    body: 'Read the evidence, the carrier tracking, the recommendation and the letter. A delivered parcel gives strong evidence to fight with. A lost parcel gets a full refund recommendation. Edit the letter if you want, then approve.',
   },
   {
     title: 'Accept the offer as the buyer',
