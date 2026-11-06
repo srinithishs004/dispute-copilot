@@ -8,6 +8,7 @@ import { agentRoutes } from './routes/agent.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { disputeRoutes } from './routes/disputes.js';
 import { storeRoutes } from './routes/store.js';
+import { trackingRoutes } from './routes/tracking.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { securityHeaders } from './spa/securityHeaders.js';
 import { serveWeb } from './spa/static.js';
@@ -59,6 +60,7 @@ export function createApp(deps: AppDeps): express.Express {
   app.use(actionRoutes(deps));
   app.use(dashboardRoutes(deps));
   app.use(storeRoutes(deps));
+  app.use(trackingRoutes(deps));
   if (deps.webDistDir) serveWeb(app, { distDir: deps.webDistDir, logger });
   app.use((_req, res) => {
     res.status(404).json({ error: 'not found' });

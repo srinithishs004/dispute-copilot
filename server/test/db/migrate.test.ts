@@ -8,7 +8,7 @@ import { loadConfig } from '../../src/config.js';
 
 const TABLES = [
   'orders', 'shipments', 'messages', 'store_policy', 'webhook_events', 'disputes',
-  'evidence_items', 'analyses', 'actions', 'jobs', 'schema_migrations',
+  'evidence_items', 'analyses', 'actions', 'jobs', 'schema_migrations', 'tracking_events',
 ];
 
 let db: Db | undefined;
@@ -19,7 +19,7 @@ afterEach(async () => {
 
 test('migrate applies migrations once and creates every table', async () => {
   db = await createDb({ databaseUrl: null, pgliteDir: null });
-  expect(await migrate(db)).toEqual(['001_init.sql', '002_phase2.sql', '003_phase3.sql']);
+  expect(await migrate(db)).toEqual(['001_init.sql', '002_phase2.sql', '003_phase3.sql', '004_tracking.sql']);
   const { rows } = await db.query<{ table_name: string }>(
     `select table_name from information_schema.tables where table_schema = 'public'`,
   );
@@ -78,7 +78,7 @@ test('003 backfills original_amount from the PayPal transaction, else the curren
   await ins('with-gross', { disputed_transactions: [{ gross_amount: { value: '25.00' } }] });
   await ins('no-gross', {});
   await ins('bad-gross', { disputed_transactions: [{ gross_amount: { value: 'n/a' } }] });
-  expect(await migrate(db)).toEqual(['003_phase3.sql']);
+  expect(await migrate(db)).toEqual(['003_phase3.sql', '004_tracking.sql']);
   const { rows } = await db.query<{ id: string; o: string }>(
     'select paypal_dispute_id id, original_amount::text o from disputes order by 1',
   );

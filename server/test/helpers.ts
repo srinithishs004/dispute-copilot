@@ -61,5 +61,16 @@ function getTemplate(): Promise<PGlite> {
 
 /** In-memory PGlite database with all migrations applied (an independent clone per call). */
 export async function makeTestDb(): Promise<Db> {
-  return wrapPglite(await (await getTemplate()).clone());
+  const clone = await (await getTemplate()).clone();
+  clones.add(clone);
+  return wrapPglite(clone);
+}
+
+const clones = new Set<PGlite>();
+
+/** Free every clone (and the template) so a long file does not hold WASM memory until the worker exits. */
+export async function closeTestDbs(): Promise<void> {
+  const open = [...clones];
+  clones.clear();
+  await Promise.allSettled(open.map((c) => c.close()));
 }

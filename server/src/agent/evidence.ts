@@ -11,6 +11,8 @@ export type EvidencePack = {
   facts: Fact[];
   checklist: { requirement: string; present: boolean }[];
   missing: string[];
+  /** Set only when the carrier reports the parcel lost or undeliverable. */
+  carrierException?: string;
 };
 
 const REQUIREMENTS: Record<string, string[]> = {
@@ -27,6 +29,8 @@ export function formatFactDate(v: string | Date): string {
   return Number.isNaN(d.getTime()) ? String(v) : DATE_FMT.format(d);
 }
 const fmt = (v: string | Date | null | undefined) => (v == null || v === '' ? v : formatFactDate(v));
+const SCAN_FMT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZone: 'UTC', timeZoneName: 'short' });
+const scanTime = (v: string) => (Number.isNaN(new Date(v).getTime()) ? v : SCAN_FMT.format(new Date(v)));
 
 export function buildEvidencePack(detail: DisputeDetail, bundle: OrderBundle): EvidencePack {
   const { order, shipments, messages, policy } = bundle;
@@ -47,7 +51,13 @@ export function buildEvidencePack(detail: DisputeDetail, bundle: OrderBundle): E
     add(`shipment.${i}.shipped_at`, 'Shipped at', fmt(s.shippedAt));
     add(`shipment.${i}.delivered_at`, 'Delivered at', fmt(s.deliveredAt));
     if (s.signatureProof) add(`shipment.${i}.signature`, 'Signature on delivery', 'Signature proof on file');
+    add(`shipment.${i}.signed_by`, 'Signed for by', s.signedBy);
+    add(`shipment.${i}.delivered_to`, 'Delivery location', s.deliveredTo);
+    if (s.simulated) add(`shipment.${i}.source`, 'Tracking source', 'Dispute Copilot sandbox carrier (simulated)');
   });
+  (bundle.trackingEvents ?? []).forEach((e, j) =>
+    add(`tracking.${j}`, 'Carrier scan', `${scanTime(e.occurredAt)}: ${e.description}${e.location ? ` (${e.location})` : ''}`),
+  );
 
   messages.forEach((m, i) => add(`message.${i}`, `Store message from ${m.sender}`, m.body));
   add('policy.text', 'Refund policy', policy.policyText);
@@ -71,6 +81,7 @@ export function buildEvidencePack(detail: DisputeDetail, bundle: OrderBundle): E
   const reqs = REQUIREMENTS[detail.reason] ?? DEFAULT_REQUIREMENTS;
   const checklist = reqs.map((requirement) => ({ requirement, present: present[requirement] ?? false }));
 
+  const failed = shipments.some((s) => s.status === 'delivery_failed');
   return {
     disputeId: detail.dispute_id,
     reason: detail.reason,
@@ -79,5 +90,6 @@ export function buildEvidencePack(detail: DisputeDetail, bundle: OrderBundle): E
     facts,
     checklist,
     missing: checklist.filter((c) => !c.present).map((c) => c.requirement),
+    ...(failed ? { carrierException: 'The carrier reports a delivery exception: the package could not be located.' } : {}),
   };
 }

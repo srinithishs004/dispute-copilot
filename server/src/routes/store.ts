@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Router, type Response } from 'express';
 import type { AppDeps } from '../app.js';
+import { isSimScenario, syncOrderTracking, type SimScenario } from '../carrier/sandboxCarrier.js';
 import { captureOrder, createOrder } from '../paypal/orders.js';
 import { cancelPage, errorPage, storePage, thankYouPage } from '../store/pages.js';
 import { PRODUCTS } from '../store/repo.js';
@@ -40,11 +41,12 @@ export function storeRoutes(deps: AppDeps): Router {
       return;
     }
     const orderId = newOrderId();
+    const delivery: SimScenario = isSimScenario(req.body?.delivery) ? req.body.delivery : 'DELIVERED';
     try {
       await db.query(
-        `insert into orders (id, item, amount, currency, buyer_email, status)
-         values ($1, $2, $3, 'USD', null, 'PENDING')`,
-        [orderId, product.name, product.price],
+        `insert into orders (id, item, amount, currency, buyer_email, status, delivery_sim)
+         values ($1, $2, $3, 'USD', null, 'PENDING', $4)`,
+        [orderId, product.name, product.price, delivery],
       );
       const created = await createOrder(paypal, {
         invoiceId: orderId,
@@ -76,11 +78,13 @@ export function storeRoutes(deps: AppDeps): Router {
       return;
     }
     if (found.status === 'PAID') {
-      html(res, 200, thankYouPage(found.id));
+      html(res, 200, thankYouPage(found.id, trackingNumberFor(found.id)));
       return;
     }
     try {
       const { captureId } = await captureOrder(paypal, token, { requestId: `capture-${found.id}` });
+      const sim = (await db.query<{ delivery_sim: string }>('select delivery_sim from orders where id = $1', [found.id])).rows[0]?.delivery_sim;
+      const scenario: SimScenario = isSimScenario(sim) ? sim : 'DELIVERED';
       await db.transaction(async (tx) => {
         // Only the request that flips PENDING to PAID creates the shipment.
         const updated = await tx.query(
@@ -90,12 +94,13 @@ export function storeRoutes(deps: AppDeps): Router {
         );
         if (updated.rows.length === 0) return;
         await tx.query(
-          `insert into shipments (order_id, carrier, tracking_number, status, shipped_at)
-           values ($1, 'USPS', $2, 'in_transit', now())`,
-          [found.id, trackingNumberFor(found.id)],
+          `insert into shipments (order_id, carrier, tracking_number, status, shipped_at, simulated, sim_scenario)
+           values ($1, 'USPS', $2, 'pre_transit', now(), true, $3)`,
+          [found.id, trackingNumberFor(found.id), scenario],
         );
       });
-      html(res, 200, thankYouPage(found.id));
+      await syncOrderTracking(db, found.id, new Date());
+      html(res, 200, thankYouPage(found.id, trackingNumberFor(found.id)));
     } catch (err) {
       logger.warn(`capture failed: ${err instanceof Error ? err.name : 'unknown'}`);
       html(res, 502, errorPage('Payment not completed', 'We could not confirm your payment. Please try again.'));
