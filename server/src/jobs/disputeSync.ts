@@ -1,5 +1,5 @@
 import type { Db } from '../db/db.js';
-import { listDisputes } from '../paypal/disputes.js';
+import { listAllDisputes } from '../paypal/disputes.js';
 import type { PayPalClient } from '../paypal/client.js';
 import { enqueue } from './queue.js';
 import type { JobHandler } from './worker.js';
@@ -44,7 +44,7 @@ export function disputeSyncJob(deps: DisputeSyncDeps): JobHandler {
     await enqueueSyncIfNone(db, new Date(now().getTime() + DISPUTE_SYNC_INTERVAL_MS), job.id);
     let listed;
     try {
-      listed = await listDisputes(paypal, { pageSize: 20 });
+      listed = await listAllDisputes(paypal, { pageSize: 20 });
     } catch (err) {
       deps.logger?.warn(`dispute sync skipped: ${err instanceof Error ? err.name : 'Error'}`);
       return;
