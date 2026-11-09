@@ -12,7 +12,7 @@ It is an entry for the PayPal AI Hackathon and runs on the PayPal sandbox only: 
 Sandbox only, no real money. Sign in at https://dispute-copilot-zv53.onrender.com/login with the judge account (read and approve; no sync, settle or debug actions).
 
 - Email: `judge@srinithishs.qzz.io`
-- Password: `PASTE_JUDGE_PASSWORD_HERE`
+- Password: `YourJudgePassword`
 
 The sandbox buyer account and a step by step walkthrough are on the [`/guide`](https://dispute-copilot-zv53.onrender.com/guide) page.
 
