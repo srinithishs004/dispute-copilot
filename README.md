@@ -7,6 +7,15 @@ It is an entry for the PayPal AI Hackathon and runs on the PayPal sandbox only: 
 - Live: https://dispute-copilot-zv53.onrender.com
 - Judges: open [`/guide`](https://dispute-copilot-zv53.onrender.com/guide) for the sandbox accounts and a step by step walkthrough.
 
+### Judge access
+
+Sandbox only, no real money. Sign in at https://dispute-copilot-zv53.onrender.com/login with the judge account (read and approve; no sync, settle or debug actions).
+
+- Email: `judge@srinithishs.qzz.io`
+- Password: `YourJudgePassword`
+
+The sandbox buyer account and a step by step walkthrough are on the [`/guide`](https://dispute-copilot-zv53.onrender.com/guide) page.
+
 ## Real result
 
 On Oct 27, 2026 a $25 sandbox order was disputed by the buyer. The app recommended a partial refund, the seller approved a $12.50 offer in PayPal, the buyer accepted, and the dispute resolved. That is the one end to end run so far.
